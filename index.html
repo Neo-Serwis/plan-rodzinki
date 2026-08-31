@@ -279,6 +279,13 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
 .footer{text-align:center;color:var(--tx2);font-size:.72rem;padding:16px 0 4px;font-weight:600}
 .pulse{display:inline-block;animation:pulse 1.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+.hero-heart2{display:inline-block;animation:pulse 2.4s ease-in-out infinite;cursor:pointer;padding:0 3px;font-size:.95rem}
+.hr-heart{position:fixed;bottom:-34px;z-index:70;pointer-events:none;animation:heartUp 2.3s ease-in forwards}
+@keyframes heartUp{0%{transform:translateY(0) rotate(-10deg);opacity:1}70%{opacity:1}100%{transform:translateY(-108vh) rotate(12deg);opacity:0}}
+.slide-l{animation:slideL .26s ease}
+.slide-r{animation:slideR .26s ease}
+@keyframes slideL{from{opacity:.35;transform:translateX(30px)}to{opacity:1;transform:none}}
+@keyframes slideR{from{opacity:.35;transform:translateX(-30px)}to{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -314,8 +321,8 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
    ZASADA (jak w apce Trening): każda edycja = podbij APP_VERSION,
    stopkę (sinfo) i CACHE w sw.js w tej samej operacji.
    ===================================================================== */
-const APP_VERSION = '1.0.0';
-const BUILD = '20260831a';
+const APP_VERSION = '1.1.0';
+const BUILD = '20260831b';
 
 const LS_DATA='rodzinka_data', LS_THEME='rodzinka_theme', LS_FIRED='rodzinka_fired', LS_HIDEINST='rodzinka_hideinstall';
 const DAYS=['','Poniedziałek','Wtorek','Środa','Czwartek','Piątek','Sobota','Niedziela'];
@@ -508,7 +515,10 @@ function remindersFor(ds){
    WIDOK: DZIŚ
    ===================================================================== */
 let dzisDate=todayStr();
-function renderDzis(){
+/* re-render w miejscu nie może ruszać scrolla (zgłoszenie: „ekran skacze") */
+function keepScroll(view,fn){ const y=window.scrollY; fn(); if(curView===view)window.scrollTo(0,y); }
+function renderDzis(){ keepScroll('dzis',_renderDzis); }
+function _renderDzis(){
   const ds=dzisDate, c=calcDay(ds), isToday=ds===todayStr(), nm=nowMin();
   const P=data.prefs;
   let h='';
@@ -516,7 +526,7 @@ function renderDzis(){
   /* --- hero --- */
   h+='<div class="hero"><div class="hero-nav">';
   h+='<button onclick="dzisShift(-1)" aria-label="poprzedni dzień">‹</button>';
-  h+='<div class="hero-date"><div class="dname">'+(isToday?'Dziś':'')+(isToday?' · ':'')+DAYS[c.dow]+'</div><div class="dsub">'+esc(fmtLong(ds).split(', ')[1])+(isToday?'':' · '+fmtShort(ds))+'</div></div>';
+  h+='<div class="hero-date"><div class="dname">'+(isToday?'Dziś':'')+(isToday?' · ':'')+DAYS[c.dow]+'</div><div class="dsub">'+esc(fmtLong(ds).split(', ')[1])+(isToday?'':' · '+fmtShort(ds))+' <span class="hero-heart2" onclick="heartRain()">❤️</span></div></div>';
   h+='<button onclick="dzisShift(1)" aria-label="następny dzień">›</button></div>';
   if(isToday){
     const next=nextEventToday(c,nm);
@@ -693,7 +703,8 @@ function shareDay(ds){
    ===================================================================== */
 let weekOffset=0;
 function mondayOf(ds,off){ const d=pdate(ds); d.setDate(d.getDate()-(isoDow(d)-1)+off*7); return dstr(d); }
-function renderTydzien(){
+function renderTydzien(){ keepScroll('tydzien',_renderTydzien); }
+function _renderTydzien(){
   const mon=mondayOf(todayStr(),weekOffset);
   let h='<div class="wk-nav"><button onclick="wkShift(-1)">‹</button>'+
     '<div class="wk-lbl" onclick="wkShift(0)">'+(weekOffset===0?'Bieżący tydzień':(weekOffset===1?'Następny tydzień':(weekOffset===-1?'Poprzedni tydzień':fmtShort(mon)+' – '+fmtShort(addDays(mon,6)))))+
@@ -783,7 +794,8 @@ function openDay(ds){ dzisDate=ds; showView('dzis'); }
 /* =====================================================================
    WIDOK: PLAN (edycja rodziny, godzin, zajęć, przypomnień)
    ===================================================================== */
-function renderPlan(){
+function renderPlan(){ keepScroll('plan',_renderPlan); }
+function _renderPlan(){
   let h='<div class="sect-title">👨‍👩‍👧‍👦 Rodzina i godziny lekcji</div>';
   for(const p of data.people)h+=personCard(p);
   h+='<button class="btn btn-ghost" style="margin-bottom:6px" onclick="openPersonModal(null)">➕ Dodaj osobę</button>';
@@ -1002,7 +1014,8 @@ function refreshAfterOv(){ renderDzis(); renderTydzien(); }
 /* =====================================================================
    WIDOK: WIĘCEJ
    ===================================================================== */
-function renderWiecej(){
+function renderWiecej(){ keepScroll('wiecej',_renderWiecej); }
+function _renderWiecej(){
   const P=data.prefs;
   let h='<div class="sect-title">🎨 Motyw</div><div class="card"><div class="themes">';
   for(const t of THEMES){
@@ -1175,9 +1188,10 @@ function renderAll(scroll){ renderDzis(); renderTydzien(); renderPlan(); renderW
 
 /* ---------- modal ---------- */
 function openModal(html){
+  const was=$('#modalBk').classList.contains('open');
   $('#sheet').innerHTML='<div class="grip"></div>'+html;
   $('#modalBk').classList.add('open');
-  history.pushState({v:curView,m:1},'');
+  if(!was)history.pushState({v:curView,m:1},'');
 }
 function closeModal(){ if($('#modalBk').classList.contains('open'))history.back(); }
 function reallyCloseModal(){
@@ -1186,6 +1200,36 @@ function reallyCloseModal(){
   setTimeout(()=>_modalClosing=false,80);
 }
 $('#modalBk').addEventListener('click',e=>{ if(e.target.id==='modalBk')closeModal(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('#modalBk').classList.contains('open'))closeModal(); });
+
+/* ---------- gesty: swipe palcem ---------- */
+function addSwipe(el,cb){
+  let sx=0,sy=0,st=0;
+  el.addEventListener('touchstart',e=>{ if(e.touches.length!==1)return; sx=e.touches[0].clientX; sy=e.touches[0].clientY; st=Date.now(); },{passive:true});
+  el.addEventListener('touchend',e=>{
+    if($('#modalBk').classList.contains('open'))return;
+    const t=e.changedTouches[0], dx=t.clientX-sx, dy=t.clientY-sy;
+    if(Date.now()-st<650&&Math.abs(dx)>60&&Math.abs(dy)<60&&Math.abs(dx)>1.5*Math.abs(dy))cb(dx<0?1:-1);
+  },{passive:true});
+}
+function swipeFx(sel,dir){ const el=$(sel); el.classList.remove('slide-l','slide-r'); void el.offsetWidth; el.classList.add(dir>0?'slide-l':'slide-r'); }
+addSwipe($('#v-dzis'),dir=>{ dzisShift(dir); swipeFx('#v-dzis',dir); });
+addSwipe($('#v-tydzien'),dir=>{ wkShift(dir); swipeFx('#v-tydzien',dir); });
+
+/* ---------- serduszka ❤️ ---------- */
+function heartRain(){
+  vibrate(15);
+  const ems=['❤️','💖','💕','💗','💘'];
+  for(let i=0;i<16;i++){
+    const s=document.createElement('div');
+    s.className='hr-heart'; s.textContent=ems[i%ems.length];
+    s.style.left=(4+Math.random()*90)+'vw';
+    s.style.animationDelay=(Math.random()*0.55)+'s';
+    s.style.fontSize=(15+Math.random()*20)+'px';
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),3200);
+  }
+}
 
 /* ---------- toast ---------- */
 function toast(msg,cls){
@@ -1200,6 +1244,7 @@ function toast(msg,cls){
    ===================================================================== */
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredPrompt=e; if(curView==='dzis')renderDzis(); });
+window.addEventListener('appinstalled',()=>{ deferredPrompt=null; toast('📲 Zainstalowano!'); renderAll(); });
 function installAvailable(){ return !!deferredPrompt&&!isStandalone(); }
 function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true; }
 function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream; }
