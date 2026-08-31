@@ -210,6 +210,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 .btn-sm{padding:7px 12px;font-size:.8rem;border-radius:10px;width:auto}
 .iconbtn{background:var(--bg3);border:1px solid var(--line);color:var(--tx);width:34px;height:34px;border-radius:10px;font-size:14px;flex-shrink:0}
 .switch{position:relative;width:46px;height:26px;flex-shrink:0}
+.frow label.switch{flex:0 0 46px}
 .switch input{opacity:0;width:0;height:0}
 .switch .sl{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:.2s}
 .switch .sl::before{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
@@ -592,15 +593,15 @@ function buildTimeline(c,nm){
   // końce lekcji
   for(const r of c.schoolRows){
     let badge='';
-    if(r.p.role==='opiekun'){ badge='<span class="badge b-line">koniec pracy</span>'; }
+    if(r.p.role==='opiekun'){ badge=''; }
     else if(c.V){
       const tr=c.V.trips.find(t=>t.kids.some(k=>k.p.id===r.p.id));
       if(tr){ const w=tr.t-r.end;
         badge=w>=10?'<span class="badge b-warn">🏫 świetlica do '+toHM(tr.t)+' ('+durTxt(w)+')</span>'
                    :'<span class="badge b-ok">odbiór od razu</span>'; }
     }
-    items.push({t:r.end,ico:'🔔',hot:false,
-      title:chip(r.p)+' koniec lekcji'+(r.changed?' <span class="badge b-info">zmienione</span>':''),
+    items.push({t:r.end,ico:r.p.role==='opiekun'?'💼':'🎒',hot:false,
+      title:chip(r.p)+(r.p.role==='opiekun'?' koniec pracy':' koniec lekcji')+(r.changed?' <span class="badge b-info">zmienione</span>':''),
       sub:badge});
   }
   // kursy
@@ -1139,6 +1140,7 @@ function applyView(v){
   $('#v-'+v).classList.add('active');
   $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   renderCur();
+  window.scrollTo(0,0);
 }
 $$('nav button').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.v==='dzis')dzisDate=todayStr(); showView(b.dataset.v); }));
 
@@ -1210,6 +1212,7 @@ if('serviceWorker' in navigator){
    START
    ===================================================================== */
 load();
+try{ history.scrollRestoration='manual'; }catch(e){}
 document.body.dataset.theme=curTheme();
 (function(){ const t=THEMES.find(x=>x.id===curTheme()); if(t)$('#metaTheme').setAttribute('content',t.acc); })();
 history.replaceState({v:'dzis'},'');
