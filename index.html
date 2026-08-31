@@ -202,6 +202,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 .plan-grid{display:grid;grid-template-columns:34px 96px 1fr;gap:6px;align-items:center}
 .plan-grid .dlbl{font-size:.8rem;font-weight:700;color:var(--tx2)}
 .plan-grid input[type=text]{font-size:.78rem;font-weight:500;padding:8px 8px}
+.plan-grid.g4{grid-template-columns:26px 92px 92px 1fr}
+.plan-grid.g4 input[type=time]{width:100%}
+.plan-grid .ghead{font-size:.68rem;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.3px}
 .btn{border:none;border-radius:12px;padding:11px 16px;font-weight:700;font-size:.9rem;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:transform .1s}
 .btn:active{transform:scale(.97)}
 .btn-acc{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;width:100%}
@@ -337,7 +340,7 @@ function seedData(){
   return {
     ver:1,
     people:[
-      {id:'mama',   name:'Mama',   emoji:'👩‍🏫', color:'#8b5cf6', role:'opiekun',
+      {id:'mama',   name:'Ania',   emoji:'👩‍🏫', color:'#8b5cf6', role:'opiekun',
        ends:{1:'13:00',2:'12:00',3:'12:00',4:'12:00',5:'12:00'}, notes:{}},
       {id:'olek',   name:'Olek',   emoji:'⚽', color:'#3b82f6', role:'dziecko',
        ends:{1:'11:00',2:'13:55',3:'11:00',4:'13:00',5:'11:00'}, notes:{1:'do potwierdzenia — może 12:00'}},
@@ -414,22 +417,28 @@ function calcDay(ds){
     if(o.off){ off=true; changed=true; }
     else if(o.end){ endStr=o.end; changed=true; }
     if(o.note){ note=o.note; changed=true; }
-    return {p, endStr:off?null:endStr, end:off?null:toMin(endStr), off, note, changed};
+    // kto odbiera: nadpisanie dnia > stała reguła tygodniowa > (puste = plan odbioru opiekuna)
+    let by=(o.pickupBy!=null)?o.pickupBy:(((p.pickupBy||{})[dow])||'');
+    by=String(by).trim();
+    if(o.pickupBy!=null)changed=true;
+    return {p, endStr:off?null:endStr, end:off?null:toMin(endStr), off, note, changed, by};
   });
   const gRow=rows.find(r=>r.p.id===g.id);
   const gEnd=gRow?gRow.end:null;
   const kids=rows.filter(r=>r.p.role!=='opiekun'&&r.end!=null);
+  const others=kids.filter(r=>r.by);
+  const own=kids.filter(r=>!r.by);
   const schoolRows=rows.filter(r=>r.end!=null);
 
-  // --- warianty odbioru ---
+  // --- warianty odbioru (tylko dzieci odbierane przez opiekuna) ---
   let A=null,B=null;
-  if(kids.length){
+  if(own.length){
     const ref=(gEnd!=null)?gEnd:0;
-    const tA=Math.max(ref,...kids.map(k=>k.end));
-    A={trips:[{t:tA,kids:kids.slice()}]};
+    const tA=Math.max(ref,...own.map(k=>k.end));
+    A={trips:[{t:tA,kids:own.slice()}]};
     if(gEnd!=null){
-      const g1=kids.filter(k=>k.end<=gEnd+P.smallWait);
-      const g2=kids.filter(k=>k.end>gEnd+P.smallWait);
+      const g1=own.filter(k=>k.end<=gEnd+P.smallWait);
+      const g2=own.filter(k=>k.end>gEnd+P.smallWait);
       if(g1.length&&g2.length&&Math.max(...g2.map(k=>k.end))>=gEnd+P.twoTripThreshold){
         B={trips:[{t:Math.max(gEnd,...g1.map(k=>k.end)),kids:g1},{t:Math.max(...g2.map(k=>k.end)),kids:g2}]};
       }
@@ -453,8 +462,8 @@ function calcDay(ds){
     .sort((x,y)=>x.start-y.start);
   const skipped=data.activities.filter(a=>a.active!==false&&a.dow===dow&&((ov.skipAct||{})[a.id]));
 
-  return {ds,dow,ov,rows,gRow,gEnd,kids,schoolRows,A,B,V,chosen,prefV,auto,homeGap,acts,skipped,
-          waitA:kids.length?waitSum(A):0, waitB:B?waitSum(B):null,
+  return {ds,dow,ov,rows,gRow,gEnd,kids,others,own,schoolRows,A,B,V,chosen,prefV,auto,homeGap,acts,skipped,
+          waitA:own.length?waitSum(A):0, waitB:B?waitSum(B):null,
           dayNote:ov.note||''};
 }
 
@@ -544,7 +553,7 @@ function renderDzis(){
   }
 
   /* --- warianty odbioru --- */
-  if(c.kids.length&&c.gEnd!=null){
+  if(c.own.length&&c.gEnd!=null){
     h+='<div class="card"><h3>🚗 Jak odebrać?'+(c.prefV==='auto'?'<span class="r">auto: wariant '+(c.auto==='A'?'1 kurs':'2 kursy')+'</span>':'')+'</h3>';
     h+='<div class="seg">'+
       segBtn(c,'auto','🤖 Auto')+segBtn(c,'A','1 kurs')+(c.B?segBtn(c,'B','2 kursy'):'')+'</div>';
@@ -594,6 +603,7 @@ function buildTimeline(c,nm){
   for(const r of c.schoolRows){
     let badge='';
     if(r.p.role==='opiekun'){ badge=''; }
+    else if(r.by){ badge='<span class="badge b-info">🤝 odbiera: '+esc(r.by)+'</span>'; }
     else if(c.V){
       const tr=c.V.trips.find(t=>t.kids.some(k=>k.p.id===r.p.id));
       if(tr){ const w=tr.t-r.end;
@@ -650,7 +660,7 @@ function buildTimeline(c,nm){
 function nextEventToday(c,nm){
   const evs=[];
   if(c.schoolRows.length)evs.push({t:toMin(data.prefs.schoolStart),big:'Wyjazd do szkoły',sub:'start '+data.prefs.schoolStart});
-  for(const r of c.schoolRows)evs.push({t:r.end,big:r.p.name+' kończy o '+toHM(r.end),sub:r.p.role==='opiekun'?'koniec pracy':'koniec lekcji'});
+  for(const r of c.schoolRows)evs.push({t:r.end,big:r.p.name+' kończy o '+toHM(r.end),sub:r.p.role==='opiekun'?'koniec pracy':(r.by?'odbiera '+r.by:'koniec lekcji')});
   if(c.V)c.V.trips.forEach((tr,i)=>evs.push({t:tr.t,big:'Odbiór o '+toHM(tr.t),sub:tr.kids.map(k=>k.p.name).join(', ')}));
   for(const x of c.acts){ const pr=person(x.a.personId);
     if(x.dep!=null)evs.push({t:x.dep,big:'Wyjazd: '+x.a.name,sub:(pr?pr.name+' · ':'')+'zajęcia '+x.a.start});
@@ -670,6 +680,7 @@ function shareDay(ds){
   const c=calcDay(ds); let t='📅 '+fmtLong(ds)+'\n';
   for(const r of c.schoolRows)t+=r.p.emoji+' '+r.p.name+' kończy '+toHM(r.end)+'\n';
   if(c.V)c.V.trips.forEach((tr,i)=>{t+='🚗 '+(c.V.trips.length>1?'Kurs '+(i+1)+': ':'Odbiór: ')+toHM(tr.t)+' — '+tr.kids.map(k=>k.p.name).join(', ')+'\n';});
+  for(const r of c.others)t+='🤝 '+r.p.name+' ('+toHM(r.end)+') — odbiera '+r.by+'\n';
   for(const x of c.acts){ const pr=person(x.a.personId);
     t+=x.a.emoji+' '+x.a.name+' ('+(pr?pr.name:'')+') '+x.a.start+'–'+x.a.end+(x.dep!=null?' · wyjazd ~'+toHM(x.dep):'')+'\n'; }
   t+='— Plan Rodzinki';
@@ -747,11 +758,11 @@ function gantt(c,isToday){
 
 function daySummary(c){
   const bits=[];
-  if(c.kids.length&&c.gEnd!=null&&c.V){
+  if(c.own.length&&c.gEnd!=null&&c.V){
     if(c.V.trips.length===1){
       const tr=c.V.trips[0];
-      bits.push('🚗 <b>'+toHM(tr.t)+'</b> — wszyscy razem');
-      const w=c.kids.filter(k=>tr.t-k.end>=10);
+      bits.push('🚗 <b>'+toHM(tr.t)+'</b> — '+(c.own.length>1?'wszyscy razem':esc(tr.kids[0].p.name)));
+      const w=c.own.filter(k=>tr.t-k.end>=10);
       if(w.length)bits.push('🏫 '+w.map(k=>esc(k.p.name)+' świetlica '+durTxt(tr.t-k.end)).join(', '));
       const mw=tr.t-c.gEnd; if(mw>=10)bits.push('☕ '+esc(guardian().name)+' czeka '+durTxt(mw));
     } else {
@@ -759,9 +770,10 @@ function daySummary(c){
       const w=[]; for(const tr of c.V.trips)for(const k of tr.kids)if(tr.t-k.end>=10)w.push(esc(k.p.name)+' '+durTxt(tr.t-k.end));
       if(w.length)bits.push('🏫 świetlica: '+w.join(', '));
     }
-  } else if(c.kids.length&&c.gEnd==null&&c.V){
+  } else if(c.own.length&&c.gEnd==null&&c.V){
     bits.push('🚗 odbiór najpóźniej <b>'+toHM(c.V.trips[0].t)+'</b> — kto odbiera?');
   }
+  for(const r of c.others)bits.push('🤝 '+esc(r.p.name)+' ('+toHM(r.end)+') — odbiera '+esc(r.by));
   for(const x of c.acts){ const pr=person(x.a.personId);
     bits.push(esc(x.a.emoji)+' '+esc(x.a.name)+(pr?' ('+esc(pr.name)+')':'')+' <b>'+x.a.start+'–'+x.a.end+'</b>'+(x.dep!=null?' · wyjazd ~'+toHM(x.dep):'')); }
   return bits.join('<br>');
@@ -808,17 +820,23 @@ function personCard(p){
   let h='<div class="card"><h3><span class="li-em" style="width:34px;height:34px;background:'+p.color+'22;border:1.5px solid '+p.color+'">'+esc(p.emoji)+'</span> '+esc(p.name)+
     (p.role==='opiekun'?' <span class="badge b-info">odbiera dzieci</span>':'')+
     '<span class="r"><button class="iconbtn" onclick="openPersonModal(\''+p.id+'\')">✏️</button></span></h3>';
-  h+='<div class="plan-grid">';
+  const kid=p.role!=='opiekun';
+  h+='<div class="plan-grid'+(kid?' g4':'')+'">';
+  if(kid)h+='<span></span><span class="ghead">koniec</span><span class="ghead">🚗 kto odbiera</span><span class="ghead">notatka</span>';
   for(let d=1;d<=5;d++){
     h+='<span class="dlbl">'+DAYS_S[d]+'</span>'+
        '<input type="time" value="'+esc((p.ends||{})[d]||'')+'" onchange="setEnd(\''+p.id+'\','+d+',this.value)">'+
+       (kid?'<input type="text" placeholder="'+esc(guardian().name)+'" value="'+esc((p.pickupBy||{})[d]||'')+'" enterkeyhint="done" onchange="setPickup(\''+p.id+'\','+d+',this.value)">':'')+
        '<input type="text" placeholder="notatka…" value="'+esc((p.notes||{})[d]||'')+'" enterkeyhint="done" onchange="setNote(\''+p.id+'\','+d+',this.value)">';
   }
-  h+='</div><div class="muted" style="margin-top:8px;font-size:.75rem">Puste pole = tego dnia brak lekcji. '+(p.role==='opiekun'?'To godziny końca pracy.':'')+'</div></div>';
+  h+='</div><div class="muted" style="margin-top:8px;font-size:.75rem">'+
+     (kid?'Puste „kto odbiera" = plan odbioru '+esc(guardian().name)+'. Wpisz np. „mama Zuzi", „babcia" — wtedy dziecko nie wlicza się do kursów.':'Puste pole = tego dnia brak lekcji. To godziny końca pracy.')+
+     '</div></div>';
   return h;
 }
 function setEnd(pid,d,v){ const p=person(pid); p.ends=p.ends||{}; if(v)p.ends[d]=v; else delete p.ends[d]; saveSoft(); }
 function setNote(pid,d,v){ const p=person(pid); p.notes=p.notes||{}; v=v.trim(); if(v)p.notes[d]=v; else delete p.notes[d]; saveSoft(); }
+function setPickup(pid,d,v){ const p=person(pid); p.pickupBy=p.pickupBy||{}; v=v.trim(); if(v)p.pickupBy[d]=v; else delete p.pickupBy[d]; saveSoft(); }
 
 /* ---------- modale: osoba ---------- */
 function openPersonModal(pid){
@@ -944,6 +962,8 @@ function openOverride(ds){
       '<input type="time" value="'+esc(r.off?'':(r.endStr||''))+'" '+(r.off?'disabled':'')+' onchange="ovEnd(\''+ds+'\',\''+r.p.id+'\',this.value,\''+esc(base)+'\')">'+
       '</div><div class="frow" style="margin-bottom:0"><label class="muted" style="font-size:.78rem">nieobecny / wolne</label>'+
       '<label class="switch"><input type="checkbox" '+(r.off?'checked':'')+' onchange="ovOff(\''+ds+'\',\''+r.p.id+'\',this.checked)"><span class="sl"></span></label></div>'+
+      (r.p.role!=='opiekun'?'<div class="frow" style="margin:6px 0 0"><label class="muted" style="font-size:.78rem">🤝 dziś odbiera</label>'+
+        '<input type="text" style="width:160px" placeholder="'+esc((((r.p.pickupBy||{})[c.dow])||guardian().name))+'" value="'+esc((((c.ov.people||{})[r.p.id]||{}).pickupBy)||'')+'" onchange="ovPickup(\''+ds+'\',\''+r.p.id+'\',this.value)"></div>':'')+
       '<input type="text" placeholder="notatka na ten dzień…" value="'+esc(((c.ov.people||{})[r.p.id]||{}).note||'')+'" style="margin-top:6px" onchange="ovNote(\''+ds+'\',\''+r.p.id+'\',this.value)"></div>';
   }
   const dayActs=data.activities.filter(a=>a.active!==false&&a.dow===c.dow);
@@ -963,7 +983,7 @@ function _ov(ds){ data.overrides[ds]=data.overrides[ds]||{}; return data.overrid
 function _ovP(ds,pid){ const o=_ov(ds); o.people=o.people||{}; o.people[pid]=o.people[pid]||{}; return o.people[pid]; }
 function ovPrune(ds){
   const o=data.overrides[ds]; if(!o)return;
-  if(o.people)for(const k in o.people){ const p=o.people[k]; if(!p.end&&!p.off&&!p.note)delete o.people[k]; }
+  if(o.people)for(const k in o.people){ const p=o.people[k]; if(!p.end&&!p.off&&!p.note&&p.pickupBy==null)delete o.people[k]; }
   if(o.people&&!Object.keys(o.people).length)delete o.people;
   if(o.skipAct)for(const k in o.skipAct)if(!o.skipAct[k])delete o.skipAct[k];
   if(o.skipAct&&!Object.keys(o.skipAct).length)delete o.skipAct;
@@ -974,6 +994,7 @@ function ovEnd(ds,pid,v,base){ const p=_ovP(ds,pid); if(v&&v!==base)p.end=v; els
 function ovOff(ds,pid,on){ const p=_ovP(ds,pid); if(on)p.off=true; else delete p.off; ovPrune(ds); saveSoft(); openOverride(ds); refreshAfterOv(); }
 function ovNote(ds,pid,v){ const p=_ovP(ds,pid); v=v.trim(); if(v)p.note=v; else delete p.note; ovPrune(ds); saveSoft(); refreshAfterOv(); }
 function ovAct(ds,aid,skip){ const o=_ov(ds); o.skipAct=o.skipAct||{}; if(skip)o.skipAct[aid]=true; else delete o.skipAct[aid]; ovPrune(ds); saveSoft(); refreshAfterOv(); }
+function ovPickup(ds,pid,v){ const p=_ovP(ds,pid); v=v.trim(); if(v)p.pickupBy=v; else delete p.pickupBy; ovPrune(ds); saveSoft(); refreshAfterOv(); }
 function ovDayNote(ds,v){ const o=_ov(ds); v=v.trim(); if(v)o.note=v; else delete o.note; ovPrune(ds); saveSoft(); refreshAfterOv(); }
 function ovClear(ds){ delete data.overrides[ds]; save(); closeModal(); renderAll(); toast('↺ przywrócono stały plan'); }
 function refreshAfterOv(){ renderDzis(); renderTydzien(); }
@@ -1027,7 +1048,7 @@ function renderWiecej(){
     h+='<div class="sect-title">📲 Aplikacja</div><div class="card"><div class="muted">Na iPhone: otwórz w <b>Safari</b> → przycisk Udostępnij <b>⎋</b> → <b>„Do ekranu początkowego"</b>.</div></div>';
   }
 
-  h+='<div class="footer">Plan Rodzinki v'+APP_VERSION+' · '+BUILD+' · zrobione z <span class="pulse">❤️</span> dla Mamy</div>';
+  h+='<div class="footer">Plan Rodzinki v'+APP_VERSION+' · '+BUILD+' · zrobione z <span class="pulse">❤️</span> dla Ani</div>';
   $('#v-wiecej').innerHTML=h;
 }
 function pref(k,v){ data.prefs[k]=v; saveSoft(); if(k==='pickupLead'||k==='actLead'||k==='schoolStart'||k==='travelMin'||k==='twoTripThreshold')renderDzis(); }
@@ -1072,7 +1093,7 @@ function importData(inp){
   rd.readAsText(f);
 }
 function load2(){ const s=seedData(); data.prefs=Object.assign({},s.prefs,data.prefs||{}); data.overrides=data.overrides||{}; data.customReminders=data.customReminders||[]; data.activities=data.activities||[]; }
-function reseed(){ if(!confirm('Przywrócić startowy plan rodziny (Mama, Olek, Wiktor, Oliwia)? Twoje obecne zmiany znikną.'))return; data=seedData(); save(); renderAll(); toast('🔄 Plan startowy przywrócony'); }
+function reseed(){ if(!confirm('Przywrócić startowy plan rodziny (Ania, Olek, Wiktor, Oliwia)? Twoje obecne zmiany znikną.'))return; data=seedData(); save(); renderAll(); toast('🔄 Plan startowy przywrócony'); }
 function wipeAll(){ if(!confirm('Na pewno wyczyścić WSZYSTKIE dane aplikacji?'))return; localStorage.removeItem(LS_DATA); localStorage.removeItem(LS_FIRED); load(); renderAll(); toast('🗑 Wyczyszczono'); }
 
 /* =====================================================================
