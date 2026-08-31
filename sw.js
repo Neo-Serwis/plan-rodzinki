@@ -1,6 +1,6 @@
 // Service Worker — Plan Rodzinki
 // ZASADA: przy każdej edycji index.html podbij APP_VERSION, BUILD i ten CACHE razem.
-const CACHE = 'rodzinka-20260831c';
+const CACHE = 'rodzinka-20260831d';
 
 self.addEventListener('install', e => {
   e.waitUntil(

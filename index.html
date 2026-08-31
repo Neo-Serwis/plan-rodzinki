@@ -322,8 +322,8 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
    ZASADA (jak w apce Trening): każda edycja = podbij APP_VERSION,
    stopkę (sinfo) i CACHE w sw.js w tej samej operacji.
    ===================================================================== */
-const APP_VERSION = '1.2.0';
-const BUILD = '20260831c';
+const APP_VERSION = '1.2.1';
+const BUILD = '20260831d';
 
 const LS_DATA='rodzinka_data', LS_THEME='rodzinka_theme', LS_FIRED='rodzinka_fired', LS_HIDEINST='rodzinka_hideinstall';
 const DAYS=['','Poniedziałek','Wtorek','Środa','Czwartek','Piątek','Sobota','Niedziela'];
@@ -695,8 +695,19 @@ function nextEventToday(c,nm){
   const diff=nx.t-nm;
   return {big:(diff<=0?'Teraz: ':'Za '+durTxt(diff)+' — ')+nx.big,sub:esc(nx.sub)+' · '+toHM(nx.t)};
 }
-function dzisShift(n){ dzisDate=addDays(dzisDate,n); renderDzis(); window.scrollTo(0,0); }
-function dzisToday(){ dzisDate=todayStr(); renderDzis(); window.scrollTo(0,0); }
+/* Przeglądanie dat zostawia ślad w historii — Wstecz cofa: inny dzień → dziś → wyjście.
+   (zasada: przycisk Wstecz zachowuje się jak człowiek oczekuje, nigdy nie wypada z apki w środku przeglądania) */
+function dzisGo(ds){
+  dzisDate=ds;
+  if(curView==='dzis'&&!modalOpen()){
+    const st=history.state||{};
+    if(ds===todayStr()&&st.d){ _navBack='dzis'; history.back(); return; } // zwiń wpis przeglądania
+    ensureBrowseEntry();
+  }
+  renderDzis(); window.scrollTo(0,0);
+}
+function dzisShift(n){ dzisGo(addDays(dzisDate,n)); }
+function dzisToday(){ dzisGo(todayStr()); }
 
 function shareDay(ds){
   const c=calcDay(ds); let t='📅 '+fmtLong(ds)+'\n';
@@ -728,7 +739,15 @@ function _renderTydzien(){
   }
   $('#v-tydzien').innerHTML=h;
 }
-function wkShift(n){ weekOffset=n===0?0:weekOffset+n; renderTydzien(); window.scrollTo(0,0); }
+function wkShift(n){
+  weekOffset=n===0?0:weekOffset+n;
+  if(curView==='tydzien'&&!modalOpen()){
+    const st=history.state||{};
+    if(weekOffset===0&&st.d){ _navBack='tydzien'; history.back(); return; }
+    ensureBrowseEntry();
+  }
+  renderTydzien(); window.scrollTo(0,0);
+}
 
 function dayCard(ds){
   const c=calcDay(ds), isToday=ds===todayStr();
@@ -1181,23 +1200,53 @@ let _lastMin=-1, _lastDay=todayStr();
    NAWIGACJA + HISTORIA (Wstecz na Androidzie)
    ===================================================================== */
 let curView='dzis', _modalClosing=false;
+function modalOpen(){ return $('#modalBk').classList.contains('open'); }
+/* wpis „przeglądania" ({d:1}) — dzięki niemu Wstecz najpierw wraca do stanu bazowego zakładki */
+function ensureBrowseEntry(){
+  const st=history.state||{};
+  if(st.d||st.m)return;
+  if(curView==='dzis'&&dzisDate!==todayStr())history.pushState({v:'dzis',d:1},'');
+  else if(curView==='tydzien'&&weekOffset!==0)history.pushState({v:'tydzien',d:1},'');
+}
 function showView(v){
-  if(v===curView){ renderAll(false); return; }
+  if(v===curView){
+    // tap w aktywną zakładkę = powrót do jej stanu bazowego (ludzki odruch)
+    if(v==='dzis'&&dzisDate!==todayStr()){ dzisGo(todayStr()); return; }
+    if(v==='tydzien'&&weekOffset!==0){ wkShift(0); return; }
+    renderCur(); return;
+  }
   const wasHome=curView==='dzis';
   curView=v;
   $$('.view').forEach(x=>x.classList.remove('active'));
   $('#v-'+v).classList.add('active');
   $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  if(v==='dzis'){ if(history.state&&history.state.v&&history.state.v!=='dzis'){ _navBack=true; history.back(); } else history.replaceState({v:'dzis'},''); }
-  else { if(wasHome)history.pushState({v},''); else history.replaceState({v},''); }
+  if(v==='dzis'){
+    if(history.state&&history.state.v&&history.state.v!=='dzis'){ _navBack='dzis'; history.back(); }
+    else { history.replaceState({v:'dzis'},''); ensureBrowseEntry(); }
+  } else {
+    if(wasHome)history.pushState({v},''); else history.replaceState({v},'');
+    ensureBrowseEntry();
+  }
   renderCur();
   window.scrollTo({top:0});
 }
-let _navBack=false;
+let _navBack=null;
 window.addEventListener('popstate',()=>{
-  if($('#modalBk').classList.contains('open')){ reallyCloseModal(); return; }
-  if(_navBack){ _navBack=false; history.replaceState({v:'dzis'},''); applyView('dzis'); return; }
-  const v=(history.state&&history.state.v)||'dzis';
+  if(modalOpen()){ reallyCloseModal(); return; }
+  const st=history.state||{};
+  if(_navBack){
+    if(st.d){ history.back(); return; } // przewiń też wpis przeglądania
+    const tv=_navBack; _navBack=null;
+    history.replaceState({v:tv},'');
+    applyView(tv);
+    ensureBrowseEntry(); // np. openDay: dzień inny niż dziś dostaje swój wpis
+    return;
+  }
+  const v=st.v||'dzis';
+  if(!st.d){ // Wstecz wylądował na stanie bazowym zakładki → wróć do „dziś"/bieżącego tygodnia
+    if(v==='dzis'&&dzisDate!==todayStr())dzisDate=todayStr();
+    if(v==='tydzien'&&weekOffset!==0)weekOffset=0;
+  }
   applyView(v);
 });
 function applyView(v){
@@ -1208,7 +1257,7 @@ function applyView(v){
   renderCur();
   window.scrollTo(0,0);
 }
-$$('nav button').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.v==='dzis')dzisDate=todayStr(); showView(b.dataset.v); }));
+$$('nav button').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.v==='dzis'&&curView!=='dzis')dzisDate=todayStr(); showView(b.dataset.v); }));
 
 function renderCur(){
   if(curView==='dzis')renderDzis();
@@ -1276,6 +1325,7 @@ function restoreUI(){
   // odtwórz normalny stos historii (baza = dzis), inaczej Wstecz/przycisk Dziś wypada z apki
   history.replaceState({v:'dzis'},'');
   if(u.v!=='dzis')history.pushState({v:u.v},'');
+  ensureBrowseEntry();
   _uiRestoreY=u.y||0;
   return true;
 }
