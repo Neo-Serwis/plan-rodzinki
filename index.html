@@ -278,6 +278,19 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
 .empty{text-align:center;padding:26px 10px;color:var(--tx2)}
 .empty .big{font-size:2.6rem;margin-bottom:6px}
 .footer{text-align:center;color:var(--tx2);font-size:.72rem;padding:16px 0 4px;font-weight:600}
+.skroty{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.skroty button{background:var(--bg2);border:1.5px solid var(--line);color:var(--tx);border-radius:999px;padding:7px 12px;font-weight:700;font-size:.78rem;box-shadow:var(--sh)}
+.hub{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px}
+.hub-t{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:16px;padding:14px 12px;cursor:pointer;box-shadow:var(--sh);font-weight:700;transition:transform .12s}
+.hub-t:active{transform:scale(.97)}
+.hub-t span{display:block;font-size:1.6rem;margin-bottom:4px}
+.hub-t small{display:block;font-weight:600;opacity:.9;font-size:.72rem;margin-top:2px}
+.sub-bar{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.05rem;margin:2px 0 12px}
+.sub-bar span{flex:1}
+.snap{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.82rem}
+.snap:last-child{border-bottom:none}
+.snap .st{flex:1;min-width:0}
+.snap .st small{display:block;color:var(--tx2);font-weight:600}
 .pulse{display:inline-block;animation:pulse 1.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
 .hero-heart2{display:inline-block;animation:pulse 2.4s ease-in-out infinite;cursor:pointer;padding:0 3px;font-size:.95rem}
@@ -296,17 +309,23 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
   <section class="view active" id="v-dzis"></section>
   <!-- ================= TYDZIEŃ ================= -->
   <section class="view" id="v-tydzien"></section>
-  <!-- ================= PLAN ================= -->
-  <section class="view" id="v-plan"></section>
+  <!-- ================= ZAKUPY ================= -->
+  <section class="view" id="v-zakupy"></section>
+  <!-- ================= NOTATKI ================= -->
+  <section class="view" id="v-notatki"></section>
   <!-- ================= WIĘCEJ ================= -->
   <section class="view" id="v-wiecej"></section>
+  <!-- ================= podwidoki (z Więcej) ================= -->
+  <section class="view" id="v-plan"></section>
+  <section class="view" id="v-cykl"></section>
 </main>
 
 <nav>
   <div class="nav-in">
     <button data-v="dzis" class="on"><span class="nico">🏠</span>Dziś</button>
     <button data-v="tydzien"><span class="nico">📅</span>Tydzień</button>
-    <button data-v="plan"><span class="nico">✏️</span>Plan</button>
+    <button data-v="zakupy"><span class="nico">🛒</span>Zakupy</button>
+    <button data-v="notatki"><span class="nico">📝</span>Notatki</button>
     <button data-v="wiecej"><span class="nico">⚙️</span>Więcej</button>
   </div>
 </nav>
@@ -314,6 +333,9 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
 <div class="modal-bk" id="modalBk"><div class="sheet" id="sheet"></div></div>
 <div id="toasts"></div>
 
+<script src="zakupy.js"></script>
+<script src="notatki.js"></script>
+<script src="cykl.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -322,8 +344,8 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
    ZASADA (jak w apce Trening): każda edycja = podbij APP_VERSION,
    stopkę (sinfo) i CACHE w sw.js w tej samej operacji.
    ===================================================================== */
-const APP_VERSION = '1.2.1';
-const BUILD = '20260831d';
+const APP_VERSION = '1.3.0';
+const BUILD = '20260902a';
 
 const LS_DATA='rodzinka_data', LS_THEME='rodzinka_theme', LS_FIRED='rodzinka_fired', LS_HIDEINST='rodzinka_hideinstall';
 const DAYS=['','Poniedziałek','Wtorek','Środa','Czwartek','Piątek','Sobota','Niedziela'];
@@ -384,7 +406,10 @@ function load(){
   const s=seedData();
   data.prefs=Object.assign({},s.prefs,data.prefs||{});
   data.overrides=data.overrides||{}; data.customReminders=data.customReminders||[]; data.activities=data.activities||[];
+  ensureModules();
 }
+/* moduły (zakupy/notatki/cykl) dopisują swoje gałęzie do data — stare kopie bez nich też działają */
+function ensureModules(){ if(typeof zkData==='function')zkData(); if(typeof ntData==='function')ntData(); if(typeof cyData==='function')cyData(); }
 let _saveT=null;
 function save(){ localStorage.setItem(LS_DATA,JSON.stringify(data)); }
 function saveSoft(){ save(); clearTimeout(_saveT); _saveT=setTimeout(()=>toast('✓ zapisano'),250); }
@@ -510,6 +535,7 @@ function remindersFor(ds){
       title:'🔔 '+r.title+(r.lead>0?' — za '+durTxt(r.lead):''),
       body:(pr?pr.name+' · ':'')+'o '+r.time});
   }
+  if(typeof cycleReminders==='function')out.push(...cycleReminders(ds));
   // lead większy niż godzina zdarzenia nie może dać ujemnego czasu — przypnij do północy
   return out.filter(r=>r.at!=null).map(r=>({...r,at:Math.max(0,r.at)})).sort((a,b)=>a.at-b.at);
 }
@@ -550,6 +576,17 @@ function _renderDzis(){
   for(const a of c.skipped)noteBits.push('🚫 '+esc(a.emoji)+' '+esc(a.name)+' — dziś odwołane');
   if(noteBits.length)h+='<div class="note-bar">'+noteBits.join('<br>')+'</div>';
 
+  /* --- skróty do modułów --- */
+  if(isToday){
+    const sk=[];
+    const zo=(typeof zkList==='function')?zkList().items.filter(i=>!i.done).length:0;
+    if(zo)sk.push('<button onclick="showView(\'zakupy\')">🛒 '+zo+' na liście</button>');
+    const pins=(typeof ntData==='function')?ntData().filter(n=>n.pinned):[];
+    if(pins.length)sk.push('<button onclick="showView(\'notatki\')">📌 '+esc(pins[0].title||'notatka')+(pins.length>1?' +'+(pins.length-1):'')+'</button>');
+    const cyt=(typeof cyVisible==='function'&&cyVisible())?cyChipText():null;
+    if(cyt)sk.push('<button onclick="showView(\'cykl\')">'+esc(cyt)+'</button>');
+    if(sk.length)h+='<div class="skroty">'+sk.join('')+'</div>';
+  }
   /* --- karta instalacji --- */
   if(isToday&&installAvailable()&&!localStorage.getItem(LS_HIDEINST)){
     h+='<div class="card install-card"><b>📲 Zainstaluj na telefonie</b><div style="font-size:.82rem;margin-top:3px;opacity:.95">Apka będzie na ekranie głównym i zadziała bez internetu.</div>'+
@@ -828,7 +865,8 @@ function openDay(ds){ dzisDate=ds; showView('dzis'); }
    ===================================================================== */
 function renderPlan(){ keepScroll('plan',_renderPlan); }
 function _renderPlan(){
-  let h='<div class="sect-title">👨‍👩‍👧‍👦 Rodzina i godziny lekcji</div>';
+  let h='<div class="sub-bar"><button class="iconbtn" onclick="showView(\'wiecej\')">←</button><span>✏️ Plan lekcji i zajęć</span></div>';
+  h+='<div class="sect-title">👨‍👩‍👧‍👦 Rodzina i godziny lekcji</div>';
   for(const p of data.people)h+=personCard(p);
   h+='<button class="btn btn-ghost" style="margin-bottom:6px" onclick="openPersonModal(null)">➕ Dodaj osobę</button>';
 
@@ -1056,7 +1094,11 @@ function refreshAfterOv(){ renderDzis(); renderTydzien(); }
 function renderWiecej(){ keepScroll('wiecej',_renderWiecej); }
 function _renderWiecej(){
   const P=data.prefs;
-  let h='<div class="sect-title">🎨 Motyw</div><div class="card"><div class="themes">';
+  let h='<div class="sect-title">🧩 Panele</div><div class="hub">'+
+    '<div class="hub-t" onclick="showView(\'plan\')"><span>✏️</span>Plan lekcji<small>osoby, godziny, zajęcia</small></div>'+
+    ((typeof cyVisible==='function'&&cyVisible())?'<div class="hub-t" onclick="showView(\'cykl\')"><span>🌸</span>Mój cykl<small>'+(cyData().prefs.pin?'zabezpieczony PIN-em':'kalendarz i fazy')+'</small></div>':'')+
+    '</div>';
+  h+='<div class="sect-title">🎨 Motyw</div><div class="card"><div class="themes">';
   for(const t of THEMES){
     h+='<div class="th-card'+(curTheme()===t.id?' on':'')+'" onclick="setTheme(\''+t.id+'\')">'+
       '<div class="th-prev" style="background:'+t.bg+'"><div class="pv-acc" style="background:'+t.acc+'"></div><div class="pv-card" style="background:'+t.card+'"></div></div>'+
@@ -1087,12 +1129,21 @@ function _renderWiecej(){
   h+='<div class="muted" style="font-size:.75rem">„Auto" proponuje 2× '+tw()+', gdy któreś dziecko kończy dużo później i realnie skraca to czekanie. Powrót inaczej niż z '+esc(guardian().name)+' (koleżanka, „wraca sam", autobus…) ustawisz przy dziecku w zakładce Plan albo jednorazowo w „Zmiany na ten dzień".</div>';
   h+='</div>';
 
-  h+='<div class="sect-title">💾 Dane</div><div class="card">';
-  h+='<div class="muted" style="margin-bottom:10px">Wszystko jest zapisane tylko w tym telefonie (localStorage). Zgraj kopię, żeby przenieść plan na drugi telefon.</div>';
-  h+='<div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn btn-ghost" onclick="exportData()">⬇️ Eksport</button><button class="btn btn-ghost" onclick="$(\'#impFile\').click()">⬆️ Import</button></div>';
+  h+='<div class="sect-title">💾 Dane i kopie bezpieczeństwa</div><div class="card">';
+  h+='<div class="muted" style="margin-bottom:10px">Dane (plan, zakupy, notatki, cykl) są tylko w tym telefonie. <b>Aktualizacje apki ich nie ruszają</b> — podmieniają wyłącznie kod. Na wszelki wypadek apka robi sama migawki: codziennie, przed każdą aktualizacją i przed każdą groźną operacją.</div>';
+  h+='<div class="badge '+(_persisted?'b-ok':'b-line')+'" style="margin-bottom:10px">'+(_persisted?'🔐 system obiecał nie kasować danych apki':'🔓 trwałość: zależna od systemu — zainstaluj apkę na ekranie głównym')+'</div>';
+  const snaps=snapsGet();
+  h+='<div style="font-weight:700;font-size:.85rem;margin:6px 0 4px">Migawki ('+snaps.length+')</div>';
+  if(!snaps.length)h+='<div class="muted" style="font-size:.8rem">Jeszcze żadnej — pierwsza zrobi się sama.</div>';
+  snaps.forEach((s,i)=>{ h+='<div class="snap"><div class="st"><b>'+fmtTs(s.ts)+'</b> · v'+esc(s.ver)+'<small>'+esc(s.reason)+' · '+Math.round(s.json.length/1024)+' KB</small></div>'+
+    '<button class="btn btn-ghost btn-sm" onclick="snapRestore('+i+')">↩ Przywróć</button><button class="iconbtn" title="pobierz" onclick="snapExport('+i+')">⬇️</button></div>'; });
+  h+='<div style="display:flex;gap:8px;margin:10px 0 8px"><button class="btn btn-ghost" onclick="snapMake(\'ręczna\');renderWiecej();toast(\'📸 Migawka zapisana\')">📸 Migawka teraz</button><button class="btn btn-ghost" onclick="exportData()">⬇️ Plik kopii</button></div>';
+  h+='<div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn btn-ghost" onclick="$(\'#impFile\').click()">⬆️ Wczytaj plik kopii</button></div>';
   h+='<input type="file" id="impFile" accept=".json,application/json" style="display:none" onchange="importData(this)">';
-  h+='<button class="btn btn-ghost" style="margin-bottom:8px" onclick="reseed()">🔄 Przywróć plan startowy rodziny</button>';
+  if(typeof cyVisible==='function')h+='<div class="frow" style="margin-top:6px"><label>🌸 Panel cyklu widoczny</label><label class="switch"><input type="checkbox" '+(cyVisible()?'checked':'')+' onchange="cyHide(!this.checked)"><span class="sl"></span></label></div>';
+  h+='<button class="btn btn-ghost" style="margin:8px 0" onclick="reseed()">🔄 Przywróć plan startowy rodziny</button>';
   h+='<button class="btn btn-danger" onclick="wipeAll()">🗑 Wyczyść wszystkie dane</button>';
+  h+='<div class="muted" style="font-size:.72rem;margin-top:6px">Reset i czyszczenie najpierw robią migawkę — wszystko da się cofnąć przyciskiem „Przywróć".</div>';
   h+='</div>';
 
   if(installAvailable()){
@@ -1143,16 +1194,17 @@ function importData(inp){
     let d=null;
     try{ d=JSON.parse(rd.result); }catch(e){}
     if(!validBackup(d)){ toast('⚠️ To nie jest poprawny plik kopii'); return; }
-    if(!confirm('Wczytać kopię z '+(f.name)+'? Obecne dane zostaną zastąpione.'))return;
+    if(!confirm('Wczytać kopię z '+(f.name)+'? Obecne dane zostaną zastąpione (najpierw zrobię migawkę).'))return;
+    snapMake('przed importem pliku');
     data=d; load2();
     if(!data.people.some(p=>p.role==='opiekun'))data.people[0].role='opiekun';
     save(); renderAll(); toast('✓ Kopia wczytana');
   };
   rd.readAsText(f);
 }
-function load2(){ const s=seedData(); data.prefs=Object.assign({},s.prefs,data.prefs||{}); data.overrides=data.overrides||{}; data.customReminders=data.customReminders||[]; data.activities=data.activities||[]; }
-function reseed(){ if(!confirm('Przywrócić startowy plan rodziny (Ania, Olek, Wiktor, Oliwia)? Twoje obecne zmiany znikną.'))return; data=seedData(); save(); renderAll(); toast('🔄 Plan startowy przywrócony'); }
-function wipeAll(){ if(!confirm('Na pewno wyczyścić WSZYSTKIE dane aplikacji? (motyw zostanie)'))return; [LS_DATA,LS_FIRED,LS_UI,LS_HIDEINST].forEach(k=>localStorage.removeItem(k)); load(); renderAll(); toast('🗑 Wyczyszczono'); }
+function load2(){ const s=seedData(); data.prefs=Object.assign({},s.prefs,data.prefs||{}); data.overrides=data.overrides||{}; data.customReminders=data.customReminders||[]; data.activities=data.activities||[]; ensureModules(); }
+function reseed(){ if(!confirm('Przywrócić startowy plan rodziny (Ania, Olek, Wiktor, Oliwia)? Zakupy, notatki i cykl zostaną; sam plan lekcji wróci do startowego. Najpierw zrobię migawkę.'))return; snapMake('przed resetem planu'); const keep={shopping:data.shopping,notes:data.notes,cycle:data.cycle}; data=Object.assign(seedData(),keep); ensureModules(); save(); renderAll(); toast('🔄 Plan startowy przywrócony'); }
+function wipeAll(){ if(!confirm('Na pewno wyczyścić WSZYSTKIE dane aplikacji? (motyw i migawki zostaną — da się cofnąć)'))return; snapMake('przed wyczyszczeniem'); [LS_DATA,LS_FIRED,LS_UI,LS_HIDEINST].forEach(k=>localStorage.removeItem(k)); load(); renderAll(); toast('🗑 Wyczyszczono'); }
 
 /* =====================================================================
    POWIADOMIENIA — silnik przypomnień (gdy apka działa)
@@ -1208,6 +1260,16 @@ function ensureBrowseEntry(){
   if(curView==='dzis'&&dzisDate!==todayStr())history.pushState({v:'dzis',d:1},'');
   else if(curView==='tydzien'&&weekOffset!==0)history.pushState({v:'tydzien',d:1},'');
 }
+/* podwidoki otwierane z Więcej — Wstecz wraca do rodzica */
+const SUBVIEWS={plan:'wiecej',cykl:'wiecej'};
+const ALL_VIEWS=['dzis','tydzien','zakupy','notatki','wiecej','plan','cykl'];
+function navTab(v){ return SUBVIEWS[v]||v; }
+function setActiveView(v){
+  curView=v;
+  $$('.view').forEach(x=>x.classList.remove('active'));
+  $('#v-'+v).classList.add('active');
+  $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===navTab(v)));
+}
 function showView(v){
   if(v===curView){
     // tap w aktywną zakładkę = powrót do jej stanu bazowego (ludzki odruch)
@@ -1215,13 +1277,18 @@ function showView(v){
     if(v==='tydzien'&&weekOffset!==0){ wkShift(0); return; }
     renderCur(); return;
   }
-  const wasHome=curView==='dzis';
-  curView=v;
-  $$('.view').forEach(x=>x.classList.remove('active'));
-  $('#v-'+v).classList.add('active');
-  $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  if(v==='cykl'&&typeof cyVisible==='function'&&!cyVisible()){ toast('Panel cyklu jest ukryty — włącz w Więcej → Dane'); return; }
+  if(SUBVIEWS[curView]===v){ history.back(); return; } // z podwidoku do rodzica = cofnij
+  const wasHome=curView==='dzis', st=history.state||{};
+  if(SUBVIEWS[v]){
+    const parent=SUBVIEWS[v];
+    if(curView!==parent){ if(wasHome)history.pushState({v:parent},''); else history.replaceState({v:parent},''); }
+    history.pushState({v},'');
+    setActiveView(v); renderCur(); window.scrollTo(0,0); return;
+  }
+  setActiveView(v);
   if(v==='dzis'){
-    if(history.state&&history.state.v&&history.state.v!=='dzis'){ _navBack='dzis'; history.back(); }
+    if(st.v&&st.v!=='dzis'){ _navBack='dzis'; history.back(); }
     else { history.replaceState({v:'dzis'},''); ensureBrowseEntry(); }
   } else {
     if(wasHome)history.pushState({v},''); else history.replaceState({v},'');
@@ -1230,19 +1297,28 @@ function showView(v){
   renderCur();
   window.scrollTo({top:0});
 }
-let _navBack=null;
+let _navBack=null, _rootBackTs=0;
 window.addEventListener('popstate',()=>{
   if(modalOpen()){ reallyCloseModal(); return; }
   const st=history.state||{};
+  if(st.root){ // dno historii: pierwsze Wstecz ostrzega, drugie (w 2,5 s) wychodzi z apki
+    if(Date.now()-_rootBackTs<2500){ history.back(); return; }
+    _rootBackTs=Date.now();
+    history.pushState({v:'dzis'},'');
+    if(curView!=='dzis'||dzisDate!==todayStr()){ dzisDate=todayStr(); applyView('dzis'); }
+    toast('Wstecz jeszcze raz = wyjście z apki');
+    return;
+  }
   if(_navBack){
-    if(st.d){ history.back(); return; } // przewiń też wpis przeglądania
-    const tv=_navBack; _navBack=null;
+    const tv=_navBack;
+    if(st.d||(st.v||'dzis')!==tv){ history.back(); return; } // przewiń wpisy przeglądania/podwidoków
+    _navBack=null;
     history.replaceState({v:tv},'');
     applyView(tv);
     ensureBrowseEntry(); // np. openDay: dzień inny niż dziś dostaje swój wpis
     return;
   }
-  const v=st.v||'dzis';
+  const v=ALL_VIEWS.includes(st.v)?st.v:'dzis';
   if(!st.d){ // Wstecz wylądował na stanie bazowym zakładki → wróć do „dziś"/bieżącego tygodnia
     if(v==='dzis'&&dzisDate!==todayStr())dzisDate=todayStr();
     if(v==='tydzien'&&weekOffset!==0)weekOffset=0;
@@ -1250,22 +1326,16 @@ window.addEventListener('popstate',()=>{
   applyView(v);
 });
 function applyView(v){
-  curView=v;
-  $$('.view').forEach(x=>x.classList.remove('active'));
-  $('#v-'+v).classList.add('active');
-  $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  setActiveView(v);
   renderCur();
   window.scrollTo(0,0);
 }
 $$('nav button').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.v==='dzis'&&curView!=='dzis')dzisDate=todayStr(); showView(b.dataset.v); }));
 
 function renderCur(){
-  if(curView==='dzis')renderDzis();
-  else if(curView==='tydzien')renderTydzien();
-  else if(curView==='plan')renderPlan();
-  else renderWiecej();
+  ({dzis:renderDzis,tydzien:renderTydzien,zakupy:renderZakupy,notatki:renderNotatki,wiecej:renderWiecej,plan:renderPlan,cykl:renderCykl}[curView]||renderDzis)();
 }
-function renderAll(scroll){ renderDzis(); renderTydzien(); renderPlan(); renderWiecej(); }
+function renderAll(scroll){ renderDzis(); renderTydzien(); renderZakupy(); renderNotatki(); renderPlan(); renderWiecej(); renderCykl(); }
 
 /* ---------- modal ---------- */
 function openModal(html){
@@ -1284,6 +1354,7 @@ function closeModal(){
 function reallyCloseModal(){
   $('#modalBk').classList.remove('open'); $('#sheet').innerHTML='';
   document.body.style.overflow='';
+  if(typeof ntOnModalClose==='function'&&typeof ntCur!=='undefined'&&ntCur)ntOnModalClose();
   setTimeout(()=>_modalClosing=false,120);
 }
 $('#modalBk').addEventListener('click',e=>{ if(e.target.id==='modalBk')closeModal(); });
@@ -1308,22 +1379,20 @@ const LS_UI='rodzinka_uistate';
 function saveUI(){
   try{ localStorage.setItem(LS_UI,JSON.stringify({v:curView,ds:dzisDate,td:todayStr(),wo:weekOffset,y:window.scrollY,ts:Date.now()})); }catch(e){}
 }
-document.addEventListener('visibilitychange',()=>{ if(document.hidden)saveUI(); });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden){ saveUI(); if(typeof cyLockOnHide==='function')cyLockOnHide(); } });
 window.addEventListener('pagehide',saveUI);
 function restoreUI(){
   let u=null;
   try{ u=JSON.parse(localStorage.getItem(LS_UI)||'null'); }catch(e){}
   if(!u||!u.ts||Date.now()-u.ts>12*3600000)return false;
-  if(!['dzis','tydzien','plan','wiecej'].includes(u.v))return false;
+  if(!ALL_VIEWS.includes(u.v))return false;
+  if(u.v==='cykl'&&typeof cyVisible==='function'&&!cyVisible())u.v='wiecej';
   // data z poprzedniej doby: jeśli patrzył na „dzisiaj", pokaż nowe dzisiaj
   if(u.ds&&/^\d{4}-\d{2}-\d{2}$/.test(u.ds))dzisDate=(u.ds===u.td&&u.td!==todayStr())?todayStr():u.ds;
   weekOffset=(u.td===todayStr()&&Number.isInteger(u.wo))?u.wo:0;
-  curView=u.v;
-  $$('.view').forEach(x=>x.classList.remove('active'));
-  $('#v-'+u.v).classList.add('active');
-  $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===u.v));
-  // odtwórz normalny stos historii (baza = dzis), inaczej Wstecz/przycisk Dziś wypada z apki
-  history.replaceState({v:'dzis'},'');
+  setActiveView(u.v);
+  // odtwórz normalny stos historii nad bazą (root → dzis → [rodzic] → widok), inaczej Wstecz wypada z apki
+  if(SUBVIEWS[u.v])history.pushState({v:SUBVIEWS[u.v]},'');
   if(u.v!=='dzis')history.pushState({v:u.v},'');
   ensureBrowseEntry();
   _uiRestoreY=u.y||0;
@@ -1354,11 +1423,46 @@ document.addEventListener('keydown',e=>{
 });
 document.addEventListener('focusin',e=>{
   const t=e.target;
-  if(t instanceof HTMLInputElement&&(t.type==='text'||t.type==='number')&&!t.getAttribute('enterkeyhint')){
+  if(!(t instanceof HTMLInputElement))return;
+  if((t.type==='text'||t.type==='number')&&!t.getAttribute('enterkeyhint')){
     const chain=fieldChain(t);
     t.enterKeyHint=(chain.indexOf(t)===chain.length-1)?'done':'next';
   }
+  // dotknięcie pola liczbowego od razu zaznacza całą wartość (żeby nie kasować cyfr ręcznie)
+  if(t.type==='number')setTimeout(()=>{ try{ t.select(); }catch(x){} },0);
 });
+
+/* ---------- kopie bezpieczeństwa (migawki w localStorage, max 7) ---------- */
+const LS_SNAPS='rodzinka_snaps', LS_LASTVER='rodzinka_lastver';
+let _persisted=false;
+function fmtTs(ts){ const d=new Date(ts); return d.getDate()+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function snapsGet(){ try{ const s=JSON.parse(localStorage.getItem(LS_SNAPS)||'[]'); return Array.isArray(s)?s:[]; }catch(e){ return []; } }
+function snapMake(reason){
+  const s=snapsGet(); const json=JSON.stringify(data);
+  if(s.length&&s[0].json===json){ s[0].ts=Date.now(); s[0].reason=reason; }
+  else s.unshift({ts:Date.now(),ver:APP_VERSION,reason,json});
+  while(s.length>7)s.pop();
+  for(;;){ try{ localStorage.setItem(LS_SNAPS,JSON.stringify(s)); break; }catch(e){ if(s.length<=1)break; s.pop(); } } // brak miejsca → mniej migawek
+  return true;
+}
+function snapAuto(){
+  const lastVer=localStorage.getItem(LS_LASTVER); const s=snapsGet();
+  if(lastVer!==APP_VERSION){ snapMake(lastVer?'przed aktualizacją '+lastVer+' → '+APP_VERSION:'pierwsze uruchomienie v'+APP_VERSION); localStorage.setItem(LS_LASTVER,APP_VERSION); }
+  else if(!s.length||Date.now()-s[0].ts>20*3600000)snapMake('automatyczna');
+}
+function snapRestore(i){
+  const s=snapsGet()[i]; if(!s)return;
+  let d=null; try{ d=JSON.parse(s.json); }catch(e){}
+  if(!validBackup(d)){ toast('⚠️ Ta migawka jest uszkodzona'); return; }
+  if(!confirm('Przywrócić migawkę z '+fmtTs(s.ts)+' ('+s.reason+')? Obecny stan zapiszę najpierw jako migawkę.'))return;
+  snapMake('przed przywróceniem'); data=d; load2(); save(); renderAll(); toast('↩ Przywrócono migawkę');
+}
+function snapExport(i){
+  const s=snapsGet()[i]; if(!s)return;
+  const blob=new Blob([s.json],{type:'application/json'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='plan-rodzinki-migawka-'+fmtTs(s.ts).replace(/[ :.]/g,'-')+'.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); toast('⬇️ Pobrano migawkę');
+}
 
 /* ---------- serduszka ❤️ ---------- */
 function heartRain(){
@@ -1376,6 +1480,13 @@ function heartRain(){
 }
 
 /* ---------- toast ---------- */
+function toastAction(msg,label,fn){
+  const t=document.createElement('div'); t.className='toast'; t.style.cursor='pointer';
+  t.innerHTML=esc(msg)+' <b style="color:var(--accent);margin-left:8px">'+esc(label)+'</b>';
+  let done=false; t.onclick=()=>{ if(done)return; done=true; fn(); t.remove(); };
+  $('#toasts').appendChild(t);
+  setTimeout(()=>{t.style.transition='opacity .4s';t.style.opacity='0';setTimeout(()=>t.remove(),420);},5000);
+}
 function toast(msg,cls){
   const t=document.createElement('div');
   t.className='toast'+(cls?' '+cls:''); t.innerHTML=esc(msg).replace(/&lt;b&gt;|&lt;\/b&gt;/g,'');
@@ -1425,7 +1536,11 @@ load();
 try{ history.scrollRestoration='manual'; }catch(e){}
 document.body.dataset.theme=curTheme();
 (function(){ const t=THEMES.find(x=>x.id===curTheme()); if(t)$('#metaTheme').setAttribute('content',t.acc); })();
-if(!restoreUI())history.replaceState({v:'dzis'},'');
+history.replaceState({v:'dzis',root:1},''); // dno: Wstecz z bazy ostrzega, drugie Wstecz wychodzi
+history.pushState({v:'dzis'},'');
+restoreUI();
+snapAuto();
+try{ if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().then(ok=>{ _persisted=!!ok; }).catch(()=>{}); }catch(e){}
 renderAll();
 if(_uiRestoreY)setTimeout(()=>window.scrollTo(0,_uiRestoreY),40);
 setInterval(tick,20000);
