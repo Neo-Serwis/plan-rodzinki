@@ -24,7 +24,14 @@ się na telefonie jak zwykła apka, a wszystkie dane trzyma **wyłącznie lokaln
 - **Mój cykl** (w Więcej) — kalendarz miesiąca z okresem, przewidywanym okresem, dniami
   płodnymi i owulacją; dzień cyklu i faza z podpowiedzią; objawy/nastrój/notatka na dzień;
   statystyki (średni cykl, regularność); dyskretne przypomnienia; PIN; ukrywanie panelu.
-- **Plan** (w Więcej) — pełna edycja osób, godzin Pn–Pt, zajęć, przypomnień.
+- **Lekcje dzieci** (w Więcej) — plan lekcji każdego dziecka na wspólnych dzwonkach
+  szkoły (kolorowe przedmioty), sprawdziany / kartkówki / „przynieść strój" / wycieczki
+  z datą, karta „Lekcje dziś" na Dziś z zapowiedzią spraw na jutro, przypomnienie
+  wieczorem dzień wcześniej, przepisanie końca lekcji do planu odbioru jednym tapem.
+- **Uroda i wizyty** (w Więcej) — paznokcie, fryzjer, kosmetyczka, brwi, masaż, lekarz:
+  odliczanie, wizyty na osi dnia i w tygodniu, historia i „Twój rytm", podpowiedź „pora
+  umówić" na podstawie Twoich odstępów, przypomnienia przed wizytą i dzień wcześniej.
+- **Plan odbiorów** (w Więcej) — pełna edycja osób, godzin Pn–Pt, zajęć, przypomnień.
 - **Zmiany na jeden dzień** — nadpisanie godziny, nieobecność, odwołane zajęcia, inny
   odbiór, notatka dnia — bez ruszania stałego planu.
 - **Przypomnienia** — konfigurowalne (ile minut wcześniej, o kim, o czym); działają,
@@ -50,8 +57,10 @@ na drugi telefon: Więcej → Dane → Plik kopii → Wczytaj.
 
 ## Rozwój
 
-`index.html` (rdzeń) + `zakupy.js` + `notatki.js` + `cykl.js` + `sw.js` (offline) +
-`manifest.json`. Bez zależności i bez builda.
+`index.html` (rdzeń) + moduły `zakupy.js`, `notatki.js`, `cykl.js`, `lekcje.js`,
+`uroda.js` + `sw.js` (offline) + `manifest.json`. Bez zależności i bez builda.
+Przed każdym wydaniem: kopia źródeł w `..\archiwum\` i tag `prev` w git
+(rollback: `git checkout prev -- . && git commit && git push`).
 
 ```bash
 python -m http.server 8766

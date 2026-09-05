@@ -318,6 +318,8 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
   <!-- ================= podwidoki (z Więcej) ================= -->
   <section class="view" id="v-plan"></section>
   <section class="view" id="v-cykl"></section>
+  <section class="view" id="v-lekcje"></section>
+  <section class="view" id="v-uroda"></section>
 </main>
 
 <nav>
@@ -336,6 +338,8 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
 <script src="zakupy.js"></script>
 <script src="notatki.js"></script>
 <script src="cykl.js"></script>
+<script src="lekcje.js"></script>
+<script src="uroda.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -344,8 +348,8 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
    ZASADA (jak w apce Trening): każda edycja = podbij APP_VERSION,
    stopkę (sinfo) i CACHE w sw.js w tej samej operacji.
    ===================================================================== */
-const APP_VERSION = '1.3.0';
-const BUILD = '20260902a';
+const APP_VERSION = '1.4.0';
+const BUILD = '20260905a';
 
 const LS_DATA='rodzinka_data', LS_THEME='rodzinka_theme', LS_FIRED='rodzinka_fired', LS_HIDEINST='rodzinka_hideinstall';
 const DAYS=['','Poniedziałek','Wtorek','Środa','Czwartek','Piątek','Sobota','Niedziela'];
@@ -409,7 +413,7 @@ function load(){
   ensureModules();
 }
 /* moduły (zakupy/notatki/cykl) dopisują swoje gałęzie do data — stare kopie bez nich też działają */
-function ensureModules(){ if(typeof zkData==='function')zkData(); if(typeof ntData==='function')ntData(); if(typeof cyData==='function')cyData(); }
+function ensureModules(){ for(const f of ['zkData','ntData','cyData','lkData','urData'])if(typeof window[f]==='function')window[f](); }
 let _saveT=null;
 function save(){ localStorage.setItem(LS_DATA,JSON.stringify(data)); }
 function saveSoft(){ save(); clearTimeout(_saveT); _saveT=setTimeout(()=>toast('✓ zapisano'),250); }
@@ -536,6 +540,8 @@ function remindersFor(ds){
       body:(pr?pr.name+' · ':'')+'o '+r.time});
   }
   if(typeof cycleReminders==='function')out.push(...cycleReminders(ds));
+  if(typeof lkReminders==='function')out.push(...lkReminders(ds));
+  if(typeof urReminders==='function')out.push(...urReminders(ds));
   // lead większy niż godzina zdarzenia nie może dać ujemnego czasu — przypnij do północy
   return out.filter(r=>r.at!=null).map(r=>({...r,at:Math.max(0,r.at)})).sort((a,b)=>a.at-b.at);
 }
@@ -594,13 +600,16 @@ function _renderDzis(){
   }
 
   /* --- oś dnia --- */
-  if(c.schoolRows.length||c.acts.length){
+  const urToday=(typeof urOn==='function')?urOn(ds).length:0;
+  if(c.schoolRows.length||c.acts.length||urToday){
     h+='<div class="card"><h3>🗓️ Plan dnia'+(isToday?'<span class="r">teraz '+toHM(nm)+'</span>':'')+'</h3><div class="tl">';
     h+=buildTimeline(c,isToday?nm:null);
     h+='</div></div>';
   } else {
-    h+='<div class="card"><div class="empty"><div class="big">🛋️</div>Dzień wolny — bez szkoły i zajęć.<br><span class="muted">Możesz dodać coś w zakładce Plan.</span></div></div>';
+    h+='<div class="card"><div class="empty"><div class="big">🛋️</div>Dzień wolny — bez szkoły i zajęć.<br><span class="muted">Możesz dodać coś w Więcej → Plan odbiorów.</span></div></div>';
   }
+  /* --- lekcje dzieci (plan + sprawdziany) --- */
+  if(typeof lkDzisCard==='function')h+=lkDzisCard(ds);
 
   /* --- warianty odbioru --- */
   if(c.own.length&&c.gEnd!=null){
@@ -704,6 +713,8 @@ function buildTimeline(c,nm){
     items.push({t:toMin(r.time),ico:'🔔',hot:false,title:esc(r.title),
       sub:(pr?chipS(pr)+' &nbsp; ':'')+'o '+r.time+((+r.lead||0)>0?' · przypomnienie '+durTxt(r.lead)+' wcześniej':'')});
   }
+  // wizyty (uroda)
+  if(typeof urTimelineItems==='function')items.push(...urTimelineItems(c.ds));
   items.sort((a,b)=>a.t-b.t);
   let h='';
   for(const it of items){
@@ -726,6 +737,7 @@ function nextEventToday(c,nm){
     evs.push({t:x.start,big:esc(x.a.emoji+' '+x.a.name),sub:(pr?pr.name+' · ':'')+'do '+x.a.end});
     evs.push({t:x.end,big:'Odbiór: '+esc(x.a.name),sub:(pr?pr.name:'')});
   }
+  if(typeof urEvents==='function')evs.push(...urEvents(c.ds));
   evs.sort((a,b)=>a.t-b.t);
   const nx=evs.find(e=>e.t>=nm);
   if(!nx)return null;
@@ -753,6 +765,8 @@ function shareDay(ds){
   for(const r of c.others)t+='↩ '+r.p.name+' ('+toHM(r.end)+'): '+r.by+'\n';
   for(const x of c.acts){ const pr=person(x.a.personId);
     t+=x.a.emoji+' '+x.a.name+' ('+(pr?pr.name:'')+') '+x.a.start+'–'+x.a.end+(x.dep!=null?' · wyjazd ~'+toHM(x.dep):'')+'\n'; }
+  if(typeof lkEventsOn==='function')for(const e of lkEventsOn(ds)){ const p=person(e.personId), T=LK_TYPES[e.type]||LK_TYPES.inne; t+=T.em+' '+(p?p.name+': ':'')+T.name+(e.subj?' — '+e.subj:'')+(e.title?' ('+e.title+')':'')+'\n'; }
+  if(typeof urOn==='function')for(const it of urOn(ds))t+=(UR_TYPES[it.type]||UR_TYPES.inne).em+' '+(it.time?it.time+' ':'')+(it.title||(UR_TYPES[it.type]||UR_TYPES.inne).name)+(it.place?' · '+it.place:'')+'\n';
   t+='— Plan Rodzinki';
   if(navigator.share){ navigator.share({text:t}).catch(()=>{}); }
   else { navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>toast('📋 Skopiowano plan dnia')); }
@@ -788,7 +802,7 @@ function wkShift(n){
 
 function dayCard(ds){
   const c=calcDay(ds), isToday=ds===todayStr();
-  const hasStuff=c.schoolRows.length||c.acts.length;
+  const hasStuff=c.schoolRows.length||c.acts.length||(typeof lkEventsOn==='function'&&lkEventsOn(ds).length)||(typeof urOn==='function'&&urOn(ds).length);
   let h='<div class="card day-card'+(isToday?' today-card':'')+'" onclick="openDay(\''+ds+'\')">';
   h+='<div class="day-head"><span class="dn">'+DAYS[c.dow]+'</span><span class="dd">'+fmtShort(ds)+'</span>'+
      (isToday?'<span class="badge b-ok">dziś</span>':'')+
@@ -856,6 +870,8 @@ function daySummary(c){
   for(const r of c.others)bits.push('↩ '+esc(r.p.name)+' ('+toHM(r.end)+'): '+esc(r.by));
   for(const x of c.acts){ const pr=person(x.a.personId);
     bits.push(esc(x.a.emoji)+' '+esc(x.a.name)+(pr?' ('+esc(pr.name)+')':'')+' <b>'+x.a.start+'–'+x.a.end+'</b>'+(x.dep!=null?' · wyjazd ~'+toHM(x.dep):'')); }
+  if(typeof lkDaySummary==='function')bits.push(...lkDaySummary(c.ds));
+  if(typeof urDaySummary==='function')bits.push(...urDaySummary(c.ds));
   return bits.join('<br>');
 }
 function openDay(ds){ dzisDate=ds; showView('dzis'); }
@@ -1095,8 +1111,10 @@ function renderWiecej(){ keepScroll('wiecej',_renderWiecej); }
 function _renderWiecej(){
   const P=data.prefs;
   let h='<div class="sect-title">🧩 Panele</div><div class="hub">'+
-    '<div class="hub-t" onclick="showView(\'plan\')"><span>✏️</span>Plan lekcji<small>osoby, godziny, zajęcia</small></div>'+
+    '<div class="hub-t" onclick="showView(\'lekcje\')"><span>📚</span>Lekcje dzieci<small>plan, sprawdziany, sprawy</small></div>'+
+    '<div class="hub-t" onclick="showView(\'uroda\')"><span>💅</span>Uroda i wizyty<small>paznokcie, fryzjer…</small></div>'+
     ((typeof cyVisible==='function'&&cyVisible())?'<div class="hub-t" onclick="showView(\'cykl\')"><span>🌸</span>Mój cykl<small>'+(cyData().prefs.pin?'zabezpieczony PIN-em':'kalendarz i fazy')+'</small></div>':'')+
+    '<div class="hub-t" onclick="showView(\'plan\')"><span>✏️</span>Plan odbiorów<small>osoby, godziny, zajęcia</small></div>'+
     '</div>';
   h+='<div class="sect-title">🎨 Motyw</div><div class="card"><div class="themes">';
   for(const t of THEMES){
@@ -1261,8 +1279,8 @@ function ensureBrowseEntry(){
   else if(curView==='tydzien'&&weekOffset!==0)history.pushState({v:'tydzien',d:1},'');
 }
 /* podwidoki otwierane z Więcej — Wstecz wraca do rodzica */
-const SUBVIEWS={plan:'wiecej',cykl:'wiecej'};
-const ALL_VIEWS=['dzis','tydzien','zakupy','notatki','wiecej','plan','cykl'];
+const SUBVIEWS={plan:'wiecej',cykl:'wiecej',lekcje:'wiecej',uroda:'wiecej'};
+const ALL_VIEWS=['dzis','tydzien','zakupy','notatki','wiecej','plan','cykl','lekcje','uroda'];
 function navTab(v){ return SUBVIEWS[v]||v; }
 function setActiveView(v){
   curView=v;
@@ -1333,9 +1351,9 @@ function applyView(v){
 $$('nav button').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.v==='dzis'&&curView!=='dzis')dzisDate=todayStr(); showView(b.dataset.v); }));
 
 function renderCur(){
-  ({dzis:renderDzis,tydzien:renderTydzien,zakupy:renderZakupy,notatki:renderNotatki,wiecej:renderWiecej,plan:renderPlan,cykl:renderCykl}[curView]||renderDzis)();
+  ({dzis:renderDzis,tydzien:renderTydzien,zakupy:renderZakupy,notatki:renderNotatki,wiecej:renderWiecej,plan:renderPlan,cykl:renderCykl,lekcje:renderLekcje,uroda:renderUroda}[curView]||renderDzis)();
 }
-function renderAll(scroll){ renderDzis(); renderTydzien(); renderZakupy(); renderNotatki(); renderPlan(); renderWiecej(); renderCykl(); }
+function renderAll(scroll){ renderDzis(); renderTydzien(); renderZakupy(); renderNotatki(); renderPlan(); renderWiecej(); renderCykl(); renderLekcje(); renderUroda(); }
 
 /* ---------- modal ---------- */
 function openModal(html){

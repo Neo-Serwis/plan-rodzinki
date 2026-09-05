@@ -7,12 +7,36 @@
 
 const CY_SYM=['ból brzucha','ból głowy','ból pleców','zmęczenie','wzdęcia','tkliwość piersi','trądzik','apetyt','bezsenność','nerwowość','płaczliwość','energia ⬆','libido ⬆','zawroty','mdłości'];
 const CY_MOOD=['😊','😐','😢','😤','🥱','🤩','🤒','🥰'];
+/* Podpowiedzi są zapisane tutaj, w kodzie (apka nie łączy się z internetem). Po kilka na fazę —
+   wybór zależy od dnia cyklu, więc zmieniają się codziennie, ale przewidywalnie. */
 const CY_PHASES={
-  menstruacja:{name:'Menstruacja',em:'🩸',tip:'Odpoczynek jest w cenie. Ciepła herbata, koc i mniej planów — świat poczeka 🫖'},
-  folikularna:{name:'Faza folikularna',em:'🌱',tip:'Energia rośnie z dnia na dzień — dobry moment na nowe rzeczy, sport i trudniejsze rozmowy 💪'},
-  owulacja:{name:'Owulacja',em:'🌸',tip:'Szczyt formy i nastroju. Jeśli planujecie (lub nie planujecie) dziecko — to te dni 💜'},
-  lutealna:{name:'Faza lutealna',em:'🌙',tip:'Może dopaść Cię ochota na słodkie i mniej cierpliwości — to hormony, nie Ty. Bądź dla siebie łagodna 🍫'},
+  menstruacja:{name:'Menstruacja',em:'🩸',tips:[
+    'Odpoczynek jest w cenie. Ciepła herbata, koc i mniej planów — świat poczeka 🫖',
+    'Ciepło na brzuch, magnez i kakao potrafią zdziałać cuda. Dziś nie musisz być bohaterką 💗',
+    'Zmęczenie jest fizjologiczne, nie z lenistwa. Jeśli możesz, idź spać godzinę wcześniej 😴',
+    'Lekki spacer często pomaga na skurcze bardziej niż leżenie — ale to Ty wiesz najlepiej 🚶‍♀️',
+    'Żelazo w diecie (szpinak, soczewica, wołowina) uzupełni to, co dziś ubywa 🥬']},
+  folikularna:{name:'Faza folikularna',em:'🌱',tips:[
+    'Energia rośnie z dnia na dzień — dobry moment na nowe rzeczy, sport i trudniejsze rozmowy 💪',
+    'To Twoja „wiosna": jasna głowa, więcej pomysłów. Zapisz je w Notatkach, zanim uciekną 💡',
+    'Skóra zwykle najładniejsza w cyklu — dobry czas na fryzjera czy sesję zdjęciową 📸',
+    'Kondycja idzie w górę — jeśli zbierałaś się na trening, teraz pójdzie najłatwiej 🏃‍♀️',
+    'Fajny moment na plany i decyzje — jesteś teraz najbardziej „na tak" ✨']},
+  owulacja:{name:'Owulacja',em:'🌸',tips:[
+    'Szczyt formy i nastroju. Jeśli planujecie (lub nie planujecie) dziecko — to te dni 💜',
+    'Lekki ból po jednej stronie brzucha w te dni to często zwykłe „ping" owulacyjne — normalne 🌸',
+    'Więcej pewności siebie, więcej uroku — wykorzystaj to na coś dla siebie 💃',
+    'Możesz mieć lekko podwyższoną temperaturę i większy apetyt na bliskość — natura wie, co robi 🔥']},
+  lutealna:{name:'Faza lutealna',em:'🌙',tips:[
+    'Może dopaść Cię ochota na słodkie i mniej cierpliwości — to hormony, nie Ty. Bądź dla siebie łagodna 🍫',
+    'Jeśli świat dziś irytuje bardziej niż zwykle, to progesteron, nie Ty. Odłóż trudne rozmowy na później 🧸',
+    'Wzdęcia i „ciężkość" pod koniec fazy są typowe — mniej soli, więcej wody i ruchu 💧',
+    'Sen bywa gorszy — wieczorem odłóż telefon wcześniej niż zwykle, ciało Ci podziękuje 🌙',
+    'To dobry tydzień na porządki i domykanie spraw — mniej na rozpoczynanie nowych 📦',
+    'Gorsze dni przed okresem mijają szybciej, gdy zaplanujesz na nie coś miłego dla siebie 🛁']},
 };
+function cyTip(phase,cycleDay){ const t=CY_PHASES[phase].tips; return t[Math.max(0,(cycleDay||1)-1)%t.length]; }
+function cyPhrase(n){ return n===0?'Okres przewidywany dziś':(n===1?'Okres przewidywany jutro':'Okres za '+n+' dni'); }
 let cyMonth=null, cyUnlocked=false, cyShowSettings=false;
 
 function cyData(){
@@ -77,7 +101,7 @@ function cycleReminders(ds){
   const pr=cyPredict(); if(!pr)return out;
   const at=toMin(P.remindTime||'20:00');
   if(P.remindPeriod&&addDays(pr.nextStart,-(+P.leadDays||0))===ds&&pr.nextStart>=ds){
-    out.push({at,key:'cy_period@'+pr.nextStart,title:P.discreet?'🌸 Przypomnienie':'🌸 Okres za '+durTxtDays(dDiff(ds,pr.nextStart)),body:P.discreet?'Zajrzyj do apki':'przewidywany '+fmtShort(pr.nextStart)+' — miej zapas w torebce'});
+    out.push({at,key:'cy_period@'+pr.nextStart,title:P.discreet?'🌸 Przypomnienie':'🌸 '+cyPhrase(dDiff(ds,pr.nextStart)),body:P.discreet?'Zajrzyj do apki':'ok. '+fmtShort(pr.nextStart)+' — miej zapas w torebce'});
   }
   if(P.remindOvu&&pr.ovu===ds){ out.push({at:toMin('09:00'),key:'cy_ovu@'+ds,title:P.discreet?'🌸 Przypomnienie':'🌸 Dziś przewidywana owulacja',body:P.discreet?'Zajrzyj do apki':'szczyt płodności'}); }
   return out;
@@ -108,9 +132,11 @@ function _renderCykl(){
        '<div class="dname" style="font-size:2rem;line-height:1.1">'+pr.cycleDay+' <span style="font-size:1rem;opacity:.95">· '+ph.em+' '+ph.name+'</span></div>';
     if(pr.late)h+='<div class="cy-big">⏳ Okres spóźnia się '+pr.late+' '+(pr.late===1?'dzień':'dni')+'</div>';
     else if(pr.phase==='menstruacja')h+='<div class="cy-big">🩸 Trwa okres'+(pr.openPeriod?'':' (wg przewidywań)')+'</div>';
-    else h+='<div class="cy-big">Następny okres za '+durTxtDays(pr.toNext)+' <span style="opacity:.9;font-weight:600">· ok. '+fmtShort(pr.nextStart)+'</span></div>';
-    h+='<div class="cy-sub">🌸 płodne dni ok. '+fmtShort(pr.fertA)+' – '+fmtShort(pr.fertB)+' · owulacja ok. '+fmtShort(pr.ovu)+(pr.pms?' · 🌙 PMS może się odzywać':'')+'</div>';
-    h+='<div class="cy-tip">'+ph.tip+'</div>';
+    else if(pr.toNext===0)h+='<div class="cy-big">🌸 Dziś przewidywany okres</div>';
+    else if(pr.toNext===1)h+='<div class="cy-big">Okres przewidywany jutro <span style="opacity:.9;font-weight:600">· '+fmtShort(pr.nextStart)+'</span></div>';
+    else h+='<div class="cy-big">Następny okres za '+pr.toNext+' dni <span style="opacity:.9;font-weight:600">· ok. '+fmtShort(pr.nextStart)+'</span></div>';
+    h+='<div class="cy-sub">🌸 dni płodne ok. '+fmtShort(pr.fertA)+' – '+fmtShort(pr.fertB)+' · owulacja ok. '+fmtShort(pr.ovu)+(pr.pms?' · 🌙 PMS może się odzywać':'')+'</div>';
+    h+='<div class="cy-tip">'+cyTip(pr.phase,pr.cycleDay)+'</div>';
     if(pr.openPeriod)h+='<button class="hero-today-btn" onclick="cyEndToday()">✅ Okres skończył się dziś</button>';
     else h+='<button class="hero-today-btn" onclick="cyStartToday()">🩸 Okres zaczął się dziś</button>';
   }
@@ -200,7 +226,7 @@ function cyOpenDay(ds){
   h+='<div class="sect-title">Okres</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
   if(!inf.period)h+='<button class="btn btn-ghost btn-sm" onclick="cyStartAt(\''+ds+'\');closeModal()">🩸 Zaczął się tego dnia</button>';
   if(inf.period)h+='<button class="btn btn-ghost btn-sm" onclick="cyEndAt(\''+ds+'\');closeModal()">✅ Skończył się tego dnia</button><button class="btn btn-ghost btn-sm" onclick="cyDelPeriod(\''+ds+'\')">🗑 Usuń ten okres</button>';
-  if(!inf.period&&ds<=todayStr())h+='<button class="btn btn-ghost btn-sm" onclick="cyEndAt(\''+ds+'\');closeModal()">koniec poprzedniego tego dnia</button>';
+  if(!inf.period&&ds<=todayStr())h+='<button class="btn btn-ghost btn-sm" onclick="cyEndAt(\''+ds+'\');closeModal()">Poprzedni okres skończył się tego dnia</button>';
   h+='</div><div class="muted" style="font-size:.72rem;margin-top:8px">zapisuje się samo</div>';
   openModal(h);
 }
