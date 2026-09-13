@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" id="metaTheme" content="#d6336c">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Rodzinka">
@@ -291,6 +292,11 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
 .snap:last-child{border-bottom:none}
 .snap .st{flex:1;min-width:0}
 .snap .st small{display:block;color:var(--tx2);font-weight:600}
+.diag-r{display:flex;gap:8px;align-items:flex-start;font-size:.82rem;padding:4px 0;font-weight:600;line-height:1.35}
+.diag-r.bad{color:var(--warn)}
+.ics-opt{cursor:pointer}
+.ics-opt span{flex:1;font-size:.84rem;font-weight:600}
+.ics-opt input{width:22px;height:22px;accent-color:var(--accent);flex-shrink:0}
 .pulse{display:inline-block;animation:pulse 1.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
 .hero-heart2{display:inline-block;animation:pulse 2.4s ease-in-out infinite;cursor:pointer;padding:0 3px;font-size:.95rem}
@@ -340,6 +346,7 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
 <script src="cykl.js"></script>
 <script src="lekcje.js"></script>
 <script src="uroda.js"></script>
+<script src="kalendarz.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -348,8 +355,8 @@ nav button.on .nico{filter:none;opacity:1;transform:translateY(-1px)}
    ZASADA (jak w apce Trening): każda edycja = podbij APP_VERSION,
    stopkę (sinfo) i CACHE w sw.js w tej samej operacji.
    ===================================================================== */
-const APP_VERSION = '1.4.0';
-const BUILD = '20260905a';
+const APP_VERSION = '1.4.1';
+const BUILD = '20260913a';
 
 const LS_DATA='rodzinka_data', LS_THEME='rodzinka_theme', LS_FIRED='rodzinka_fired', LS_HIDEINST='rodzinka_hideinstall';
 const DAYS=['','Poniedziałek','Wtorek','Środa','Czwartek','Piątek','Sobota','Niedziela'];
@@ -444,9 +451,9 @@ function vibrate(pat){ try{ if(navigator.vibrate) navigator.vibrate(pat); }catch
 /* =====================================================================
    SILNIK DNIA — kto kiedy kończy, warianty odbioru, zajęcia, przypomnienia
    ===================================================================== */
-function calcDay(ds){
+function calcDay(ds,noOv){
   const dow=isoDow(pdate(ds));
-  const ov=data.overrides[ds]||{};
+  const ov=noOv?{}:(data.overrides[ds]||{});
   const P=data.prefs;
   const g=guardian();
   const rows=data.people.map(p=>{
@@ -593,6 +600,12 @@ function _renderDzis(){
     if(cyt)sk.push('<button onclick="showView(\'cykl\')">'+esc(cyt)+'</button>');
     if(sk.length)h+='<div class="skroty">'+sk.join('')+'</div>';
   }
+  /* --- przegapione, gdy apka była zamknięta --- */
+  if(isToday){ const m=missedGet(); if(m.items.length&&!m.dismissed){
+    h+='<div class="card" style="border-color:var(--warn)"><h3>⏰ Gdy apka była zamknięta<span class="r"><button class="iconbtn" onclick="missedDismiss()">✕</button></span></h3>';
+    for(const it of m.items)h+='<div style="font-size:.85rem;margin:2px 0 6px"><b>'+toHM(it.at)+'</b> '+esc(it.title)+(it.body?' <span class="muted">· '+esc(it.body)+'</span>':'')+'</div>';
+    h+='<div class="muted" style="font-size:.74rem">Zamknięta apka nie może dzwonić. Pewne alarmy o czasie: Więcej → „Kalendarz telefonu".</div></div>';
+  } }
   /* --- karta instalacji --- */
   if(isToday&&installAvailable()&&!localStorage.getItem(LS_HIDEINST)){
     h+='<div class="card install-card"><b>📲 Zainstaluj na telefonie</b><div style="font-size:.82rem;margin-top:3px;opacity:.95">Apka będzie na ekranie głównym i zadziała bez internetu.</div>'+
@@ -1126,9 +1139,14 @@ function _renderWiecej(){
 
   h+='<div class="sect-title">🔔 Powiadomienia</div><div class="card">';
   const perm=('Notification' in window)?Notification.permission:'unsupported';
-  if(perm==='unsupported')h+='<div class="note-bar">Ta przeglądarka nie obsługuje powiadomień.</div>';
-  else if(perm!=='granted')h+='<button class="btn btn-acc" style="margin-bottom:10px" onclick="askNotif()">🔔 Włącz powiadomienia</button>';
-  else h+='<div class="badge b-ok" style="margin-bottom:10px">✓ powiadomienia włączone</div>';
+  const swOk=!!(swReg&&swReg.active);
+  h+='<div class="diag">'+
+     diagRow(perm==='granted',perm==='unsupported'?'Ta przeglądarka nie obsługuje powiadomień':(perm==='granted'?'Uprawnienie do powiadomień: włączone':(perm==='denied'?'Uprawnienie ZABLOKOWANE — odblokuj w ustawieniach telefonu (Aplikacje → Chrome/Rodzinka → Powiadomienia)':'Uprawnienie jeszcze nie nadane')))+
+     diagRow(swOk,swOk?'Silnik powiadomień: aktywny':'Silnik powiadomień: nieaktywny — zamknij i otwórz apkę ponownie')+
+     diagRow(isStandalone(),isStandalone()?'Zainstalowana na ekranie głównym':'Otwarta w przeglądarce — zainstalowana apka działa w tle stabilniej')+
+     '</div>';
+  if(perm!=='granted'&&perm!=='unsupported')h+='<button class="btn btn-acc" style="margin:8px 0 10px" onclick="askNotif()">🔔 Włącz powiadomienia</button>';
+  h+='<div class="note-bar" style="margin-top:8px">📵 <b>Ważne:</b> przypomnienia z apki dzwonią tylko, gdy apka jest otwarta albo od kilku minut w tle. Zamkniętej apki (albo po dłuższym wygaszeniu telefonu) system nie budzi — tak działają wszystkie aplikacje bez własnego serwera. Co minęło w tym czasie, zobaczysz na Dziś po otwarciu. <b>Pewne dzwonienie o czasie daje kalendarz telefonu</b> — wgraj do niego przypomnienia w sekcji poniżej.</div>';
   h+='<div class="frow"><label>Przypomnienie o odbiorze</label><label class="switch"><input type="checkbox" '+(P.pickupRemind?'checked':'')+' onchange="pref(\'pickupRemind\',this.checked)"><span class="sl"></span></label></div>';
   h+='<div class="frow"><label>… ile minut wcześniej</label><input type="number" min="0" max="180" value="'+P.pickupLead+'" onchange="pref(\'pickupLead\',Math.max(0,+this.value||0))"></div>';
   h+='<div class="frow"><label>Przypomnienia o zajęciach</label><label class="switch"><input type="checkbox" '+(P.actRemind?'checked':'')+' onchange="pref(\'actRemind\',this.checked)"><span class="sl"></span></label></div>';
@@ -1136,7 +1154,13 @@ function _renderWiecej(){
   h+='<div class="frow"><label>Poranne „do szkoły"</label><label class="switch"><input type="checkbox" '+(P.morningRemind?'checked':'')+' onchange="pref(\'morningRemind\',this.checked)"><span class="sl"></span></label></div>';
   h+='<div class="frow"><label>… o godzinie</label><input type="time" value="'+esc(P.morningTime)+'" onchange="pref(\'morningTime\',this.value||\'07:10\')"></div>';
   h+='<button class="btn btn-ghost" onclick="testNotif()">🧪 Testowe powiadomienie</button>';
-  h+='<div class="muted" style="margin-top:8px;font-size:.75rem">Przypomnienia działają, gdy apka jest uruchomiona (może być w tle). Na iPhone zainstaluj przez Safari → Udostępnij → „Do ekranu początkowego".</div>';
+  h+='</div>';
+
+  h+='<div class="sect-title">📅 Kalendarz telefonu — pewne przypomnienia</div><div class="card">';
+  h+='<div class="muted" style="margin-bottom:8px">Jeden plik z alarmami do Kalendarza Google / Kalendarza iPhone. Kalendarz dzwoni zawsze — także przy zamkniętej apce. Plik powstaje w telefonie, nic nie jest nigdzie wysyłane. Co wgrać:</div>';
+  h+=icsOpt('ics-plan','🚗 odbiory i zajęcia (co tydzień wg planu)',true)+icsOpt('ics-custom','🔔 własne przypomnienia',true)+icsOpt('ics-lekcje','📝 sprawdziany i sprawy dzieci',true)+icsOpt('ics-uroda','💅 wizyty',true)+((typeof cyVisible==='function'&&cyVisible())?icsOpt('ics-cykl','🌸 przewidywany okres (w kalendarzu tylko „🌸")',false):'');
+  h+='<div style="display:flex;gap:8px;margin:10px 0 8px"><button class="btn btn-acc" onclick="exportICS()">📅 Pobierz plik .ics</button>'+(navigator.canShare?'<button class="btn btn-ghost" onclick="shareICS()">📤 Wyślij</button>':'')+'</div>';
+  h+='<div class="muted" style="font-size:.75rem;line-height:1.5"><b>Android:</b> po pobraniu tapnij plik (powiadomienie „Pobrano" albo aplikacja Pliki) → otworzy się Kalendarz Google → „Dodaj". <b>iPhone:</b> Safari → pobrany plik → „Dodaj wszystkie" do Kalendarza. Najlepiej do osobnego kalendarza „Rodzinka": po zmianie planu wgrasz plik ponownie, a stary kalendarz wyczyścisz. Kalendarz Google może przy imporcie użyć własnych domyślnych alarmów zamiast tych z pliku — sprawdź w ustawieniach kalendarza „Rodzinka".</div>';
   h+='</div>';
 
   h+='<div class="sect-title">🚗 Logistyka</div><div class="card">';
@@ -1222,7 +1246,7 @@ function importData(inp){
 }
 function load2(){ const s=seedData(); data.prefs=Object.assign({},s.prefs,data.prefs||{}); data.overrides=data.overrides||{}; data.customReminders=data.customReminders||[]; data.activities=data.activities||[]; ensureModules(); }
 function reseed(){ if(!confirm('Przywrócić startowy plan rodziny (Ania, Olek, Wiktor, Oliwia)? Zakupy, notatki i cykl zostaną; sam plan lekcji wróci do startowego. Najpierw zrobię migawkę.'))return; snapMake('przed resetem planu'); const keep={shopping:data.shopping,notes:data.notes,cycle:data.cycle}; data=Object.assign(seedData(),keep); ensureModules(); save(); renderAll(); toast('🔄 Plan startowy przywrócony'); }
-function wipeAll(){ if(!confirm('Na pewno wyczyścić WSZYSTKIE dane aplikacji? (motyw i migawki zostaną — da się cofnąć)'))return; snapMake('przed wyczyszczeniem'); [LS_DATA,LS_FIRED,LS_UI,LS_HIDEINST].forEach(k=>localStorage.removeItem(k)); load(); renderAll(); toast('🗑 Wyczyszczono'); }
+function wipeAll(){ if(!confirm('Na pewno wyczyścić WSZYSTKIE dane aplikacji? (motyw i migawki zostaną — da się cofnąć)'))return; snapMake('przed wyczyszczeniem'); [LS_DATA,LS_FIRED,LS_UI,LS_HIDEINST,LS_MISSED].forEach(k=>localStorage.removeItem(k)); load(); renderAll(); toast('🗑 Wyczyszczono'); }
 
 /* =====================================================================
    POWIADOMIENIA — silnik przypomnień (gdy apka działa)
@@ -1239,14 +1263,22 @@ function fireNotification(title,body){
 function firedLog(){ try{ return JSON.parse(localStorage.getItem(LS_FIRED)||'{}'); }catch(e){ return {}; } }
 function tick(){
   const ds=todayStr(), nm=nowMin();
-  const fired=firedLog(); let dirty=false;
+  const fired=firedLog(); let dirty=false; const missed=[];
   for(const r of remindersFor(ds)){
     const key=ds+'|'+r.key;
-    if(r.at<=nm&&r.at>nm-10&&!fired[key]){
+    if(fired[key])continue;
+    if(r.at<=nm&&r.at>nm-10){
       fired[key]=Date.now(); dirty=true;
       fireNotification(r.title,r.body);
       toast(r.title+' · '+r.body,'remind');
+    } else if(r.at<=nm-10){
+      fired[key]=Date.now(); dirty=true; missed.push(r);
     }
+  }
+  if(missed.length){
+    missedAdd(missed);
+    toast('⏰ '+missed.length+(missed.length===1?' przypomnienie minęło':(missed.length<5?' przypomnienia minęły':' przypomnień minęło'))+', gdy apka była zamknięta','remind');
+    if(curView==='dzis')renderDzis();
   }
   if(dirty){
     const cutoff=Date.now()-2*86400000;
@@ -1515,6 +1547,14 @@ function toast(msg,cls){
 /* =====================================================================
    PWA: instalacja + service worker
    ===================================================================== */
+function diagRow(ok,text){ return '<div class="diag-r '+(ok?'ok':'bad')+'"><span>'+(ok?'✅':'⚠️')+'</span><span>'+text+'</span></div>'; }
+function icsOpt(id,label,checked){ return '<label class="frow ics-opt" for="'+id+'"><span>'+label+'</span><input type="checkbox" id="'+id+'" '+(checked?'checked':'')+'></label>'; }
+/* przypomnienia, które minęły gdy apka była zamknięta/zamrożona — pokazujemy na Dziś zamiast dzwonić po fakcie */
+const LS_MISSED='rodzinka_missed';
+function missedGet(){ try{ const m=JSON.parse(localStorage.getItem(LS_MISSED)||'null'); if(m&&m.ds===todayStr()&&Array.isArray(m.items))return m; }catch(e){} return {ds:todayStr(),items:[],dismissed:false}; }
+function missedAdd(items){ const m=missedGet(); for(const r of items)m.items.push({at:r.at,title:String(r.title||''),body:String(r.body||'')}); m.dismissed=false; try{ localStorage.setItem(LS_MISSED,JSON.stringify(m)); }catch(e){} }
+function missedDismiss(){ const m=missedGet(); m.dismissed=true; try{ localStorage.setItem(LS_MISSED,JSON.stringify(m)); }catch(e){} renderDzis(); }
+
 let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{ e.preventDefault(); deferredPrompt=e; if(curView==='dzis')renderDzis(); });
 window.addEventListener('appinstalled',()=>{ deferredPrompt=null; toast('📲 Zainstalowano!'); renderAll(); });
